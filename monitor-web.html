@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Monitor · Rastreio</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+
+<style>
+:root{
+  --tinta:#16202B; --suave:#5A6B7C; --linha:#D4DCE4;
+  --papel:#EDF1F5; --cartao:#FFF; --parado:#98A6B4;
+  --vivo:#2E7D74; --morno:#C08A2E; --frio:#B5563F;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:'Inter Tight',system-ui,sans-serif;color:var(--tinta);
+  background:var(--papel);-webkit-font-smoothing:antialiased}
+.kicker{font-family:'JetBrains Mono',monospace;font-size:10px;
+  letter-spacing:.16em;color:var(--suave);text-transform:uppercase}
+h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;letter-spacing:-.02em}
+
+#acesso{height:100%;display:flex;align-items:center;justify-content:center;padding:20px}
+.caixa{width:100%;max-width:390px}
+.caixa h1{font-size:29px;line-height:1.05;margin:6px 0 14px}
+.cartao{background:var(--cartao);border:1px solid var(--linha);border-radius:12px;padding:18px}
+label{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--suave);margin-bottom:5px}
+input[type=text],input[type=password]{width:100%;font-family:'Inter Tight',sans-serif;
+  font-size:16px;padding:11px 12px;border:1px solid var(--linha);border-radius:10px;
+  background:#fff;color:var(--tinta);margin-bottom:14px}
+input:focus{outline:2px solid var(--tinta);outline-offset:1px}
+.lembrar{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--suave);margin-bottom:16px}
+button{font-family:'Inter Tight',sans-serif;font-size:15px;font-weight:600;
+  padding:12px 16px;border-radius:10px;border:1px solid var(--tinta);
+  background:var(--tinta);color:#fff;cursor:pointer;width:100%}
+button:hover{opacity:.87}
+button.fantasma{background:transparent;color:var(--tinta);border-color:var(--linha);
+  width:auto;font-size:13px;padding:8px 12px;font-weight:500}
+.nivel{display:flex;gap:8px;margin:14px 0}
+.nivel button{flex:1;background:transparent;color:var(--tinta);
+  border-color:var(--linha);font-size:13px;padding:10px;font-weight:600}
+.nivel button.on{background:var(--tinta);color:#fff;border-color:var(--tinta)}
+.erro{color:var(--frio);font-size:13px;line-height:1.45;margin-top:12px}
+.rodape{font-size:13px;line-height:1.5;color:var(--suave);margin-top:16px}
+
+#painel{display:none;height:100%;grid-template-columns:300px 1fr;grid-template-rows:auto 1fr}
+#painel.ver{display:grid}
+header{grid-column:1/-1;background:var(--cartao);border-bottom:1px solid var(--linha);
+  padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+header h1{font-size:20px}
+.cabeca-dir{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pulso{width:11px;height:11px;border-radius:50%;background:var(--parado);flex:none}
+.pulso.on{background:var(--vivo);animation:bater 2s infinite}
+@keyframes bater{0%,100%{opacity:1}50%{opacity:.35}}
+
+aside{background:var(--cartao);border-right:1px solid var(--linha);overflow-y:auto;padding:14px}
+.secao{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--suave);margin:14px 0 8px}
+.secao:first-child{margin-top:2px}
+.item{display:flex;gap:10px;align-items:center;padding:10px;border-radius:9px;
+  cursor:pointer;border:1px solid transparent}
+.item:hover{background:var(--papel)}
+.item.on{background:var(--papel);border-color:var(--linha)}
+.item .nome{font-size:15px;font-weight:500}
+.item.on .nome{font-weight:700}
+.item .sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--suave);margin-top:2px}
+.bola{width:11px;height:11px;border-radius:50%;flex:none}
+
+main{position:relative;min-height:0;display:flex;flex-direction:column}
+#mapa{flex:1;min-height:0;background:#DFE6ED}
+.tira{background:var(--cartao);border-top:1px solid var(--linha);
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
+.celula{padding:11px 16px;border-right:1px solid var(--linha)}
+.celula:last-child{border-right:none}
+.rotulo{font-family:'JetBrains Mono',monospace;font-size:10px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--suave)}
+.valor{font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:600;margin-top:4px}
+.grupo-btn{display:flex;gap:6px}
+.grupo-btn button{width:auto;font-size:13px;padding:7px 12px;background:transparent;
+  color:var(--tinta);border-color:var(--linha);font-weight:500}
+.grupo-btn button.on{background:var(--tinta);color:#fff;border-color:var(--tinta)}
+.faixa{grid-column:1/-1;padding:12px 18px;background:#FBF0E4;
+  border-top:1px solid var(--linha);font-size:13px;line-height:1.5;display:none}
+.faixa.ver{display:block}
+.atual{width:18px;height:18px;border-radius:50%;background:#2E7D74;
+  border:3px solid #fff;box-shadow:0 0 0 2px #2E7D74,0 2px 8px rgba(0,0,0,.3)}
+
+@media (max-width:760px){
+  #painel.ver{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}
+  aside{border-right:none;border-top:1px solid var(--linha);max-height:220px;order:3}
+  main{order:2}
+}
+</style>
+</head>
+<body>
+
+<div id="acesso">
+  <div class="caixa">
+    <div class="kicker">Monitor</div>
+    <h1 id="ac-titulo">Entrar no grupo</h1>
+
+    <div class="nivel">
+      <button id="n-grupo" class="on">GRUPO</button>
+      <button id="n-familia">FAMÍLIA</button>
+    </div>
+
+    <div class="cartao">
+      <label for="i-nome" id="l-nome">Nome do grupo</label>
+      <input id="i-nome" type="text" autocapitalize="none" autocomplete="off" placeholder="equipe-campo" />
+
+      <label for="i-senha">Senha</label>
+      <input id="i-senha" type="password" autocomplete="current-password" />
+
+      <div class="lembrar">
+        <input id="i-lembrar" type="checkbox" checked />
+        <label for="i-lembrar" style="margin:0;text-transform:none;font-family:inherit;font-size:14px;letter-spacing:0">Manter conectado neste computador</label>
+      </div>
+
+      <button id="b-entrar">Entrar</button>
+      <div class="erro" id="erro-acesso"></div>
+    </div>
+    <p class="rodape" id="ac-nota">
+      Use o mesmo grupo e senha cadastrados no aplicativo do celular.
+    </p>
+  </div>
+</div>
+
+<div id="painel">
+  <header>
+    <span class="pulso" id="pulso"></span>
+    <div>
+      <div class="kicker" id="cab-escopo">—</div>
+      <h1 id="cab-titulo">Aguardando dados</h1>
+    </div>
+    <div class="cabeca-dir">
+      <div class="grupo-btn" id="janelas"></div>
+      <button class="fantasma" id="b-centrar">Centralizar</button>
+      <button class="fantasma" id="b-sair">Sair</button>
+    </div>
+  </header>
+
+  <aside><div id="lista"></div></aside>
+
+  <main>
+    <div id="mapa"></div>
+    <div class="tira">
+      <div class="celula"><div class="rotulo">Última leitura</div><div class="valor" id="v-hora">—</div></div>
+      <div class="celula"><div class="rotulo">Atraso</div><div class="valor" id="v-atraso">—</div></div>
+      <div class="celula"><div class="rotulo">Velocidade</div><div class="valor" id="v-vel">—</div></div>
+      <div class="celula"><div class="rotulo">Precisão</div><div class="valor" id="v-prec">—</div></div>
+      <div class="celula"><div class="rotulo">Pontos no período</div><div class="valor" id="v-qtd">—</div></div>
+    </div>
+  </main>
+
+  <div class="faixa" id="faixa"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ==================================================================
+   CONFIGURAÇÃO — as mesmas duas linhas que estão no src/api.js do app.
+   ================================================================== */
+
+const SUPABASE_URL = "https://wkrsittsqyniyxceijxv.supabase.co"; // ex: https://abcdefgh.supabase.co
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndrcnNpdHRzcXluaXl4Y2Vpanh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NzQ0NjcsImV4cCI6MjEwMTU1MDQ2N30.SdAdJh43pkJYuabVxjee0mZT3BDMt263DQgi2G1nhlw"; // a chave "anon public"
+
+/* ================================================================== */
+
+const INTERVALO_MS = 15000;
+const CHAVE = "rastreio.monitor.acesso";
+const JANELAS = [1, 6, 24];
+
+let acesso = null;        // { tipo:'grupo'|'familia', nome, senha }
+let nivel = "grupo";
+let janela = 6;
+let alvo = null;          // { grupo, dispositivo }
+let aparelhos = [];
+let mapa, trilha, marca, halo, primeira = true, seguir = true;
+
+const el = (id) => document.getElementById(id);
+
+async function rpc(funcao, parametros) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    throw new Error("Preencha SUPABASE_URL e SUPABASE_KEY no início deste arquivo.");
+  }
+  let r;
+  try {
+    r = await fetch(SUPABASE_URL + "/rest/v1/rpc/" + funcao, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_KEY,
+        Authorization: "Bearer " + SUPABASE_KEY
+      },
+      body: JSON.stringify(parametros)
+    });
+  } catch (e) {
+    throw new Error("Sem conexão com o servidor.");
+  }
+  const texto = await r.text();
+  if (!r.ok) {
+    let msg = "Erro " + r.status;
+    try { const j = JSON.parse(texto); msg = j.message || j.hint || msg; } catch (e) {}
+    throw new Error(msg);
+  }
+  return texto ? JSON.parse(texto) : null;
+}
+
+async function carregarAparelhos() {
+  if (acesso.tipo === "familia") {
+    return (await rpc("listar_dispositivos_familia",
+      { p_nome: acesso.nome, p_senha: acesso.senha })) || [];
+  }
+  const lista = (await rpc("listar_dispositivos",
+    { p_nome: acesso.nome, p_senha: acesso.senha })) || [];
+  return lista.map(function (d) { d.grupo = acesso.nome; return d; });
+}
+
+function carregarPontos(grupo, dispositivo) {
+  if (acesso.tipo === "familia") {
+    return rpc("listar_pontos_familia", {
+      p_nome: acesso.nome, p_senha: acesso.senha,
+      p_grupo: grupo, p_dispositivo: dispositivo, p_horas: janela
+    });
+  }
+  return rpc("listar_pontos", {
+    p_nome: acesso.nome, p_senha: acesso.senha,
+    p_dispositivo: dispositivo, p_horas: janela
+  });
+}
+
+/* ---------------- utilidades ---------------- */
+
+function haQuanto(iso) {
+  if (!iso) return "—";
+  const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return s + "s";
+  if (s < 3600) return Math.round(s / 60) + "min";
+  return Math.floor(s / 3600) + "h" + String(Math.round((s % 3600) / 60)).padStart(2, "0");
+}
+function corPor(iso) {
+  if (!iso) return "var(--parado)";
+  const min = (Date.now() - new Date(iso).getTime()) / 60000;
+  return min < 3 ? "var(--vivo)" : min < 30 ? "var(--morno)" : "var(--frio)";
+}
+function relogio(iso) {
+  return iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—";
+}
+function guardar(a){ try{ localStorage.setItem(CHAVE, JSON.stringify(a)); }catch(e){} }
+function recuperar(){ try{ const t=localStorage.getItem(CHAVE); return t?JSON.parse(t):null; }catch(e){ return null; } }
+function esquecer(){ try{ localStorage.removeItem(CHAVE); }catch(e){} }
+function faixa(txt) {
+  const f = el("faixa");
+  if (!txt) { f.classList.remove("ver"); return; }
+  f.textContent = txt;
+  f.classList.add("ver");
+}
+
+/* ---------------- acesso ---------------- */
+
+function trocarNivel(n) {
+  nivel = n;
+  el("n-grupo").className = n === "grupo" ? "on" : "";
+  el("n-familia").className = n === "familia" ? "on" : "";
+  el("ac-titulo").textContent = n === "familia" ? "Entrar na família" : "Entrar no grupo";
+  el("l-nome").textContent = n === "familia" ? "Nome da família" : "Nome do grupo";
+  el("i-nome").placeholder = n === "familia" ? "operacao-sul" : "equipe-campo";
+  el("ac-nota").textContent = n === "familia"
+    ? "A família reúne vários grupos. Você acompanha todos os aparelhos de todos os grupos ligados a ela."
+    : "Use o mesmo grupo e senha cadastrados no aplicativo do celular.";
+  el("erro-acesso").textContent = "";
+}
+el("n-grupo").onclick = () => trocarNivel("grupo");
+el("n-familia").onclick = () => trocarNivel("familia");
+
+el("b-entrar").onclick = async () => {
+  const nome = el("i-nome").value.trim();
+  const senha = el("i-senha").value;
+  el("erro-acesso").textContent = "";
+  if (!nome || !senha) { el("erro-acesso").textContent = "Preencha o nome e a senha."; return; }
+  el("b-entrar").disabled = true;
+  el("b-entrar").textContent = "Verificando…";
+  try {
+    await rpc(nivel === "familia" ? "entrar_familia" : "entrar_grupo",
+      { p_nome: nome, p_senha: senha });
+    acesso = { tipo: nivel, nome: nome.toLowerCase(), senha: senha };
+    if (el("i-lembrar").checked) guardar(acesso);
+    abrirPainel();
+  } catch (e) {
+    el("erro-acesso").textContent = e.message;
+  }
+  el("b-entrar").disabled = false;
+  el("b-entrar").textContent = "Entrar";
+};
+
+el("i-senha").addEventListener("keydown", (e) => { if (e.key === "Enter") el("b-entrar").click(); });
+el("b-sair").onclick = () => { esquecer(); location.reload(); };
+
+/* ---------------- painel ---------------- */
+
+function abrirPainel() {
+  el("acesso").style.display = "none";
+  el("painel").classList.add("ver");
+  el("cab-escopo").textContent =
+    (acesso.tipo === "familia" ? "FAMÍLIA " : "GRUPO ") + acesso.nome.toUpperCase();
+
+  el("janelas").innerHTML = "";
+  JANELAS.forEach((h) => {
+    const b = document.createElement("button");
+    b.textContent = h + "h";
+    b.className = h === janela ? "on" : "";
+    b.onclick = () => {
+      janela = h; primeira = true; seguir = true;
+      [...el("janelas").children].forEach((x, i) => x.className = JANELAS[i] === janela ? "on" : "");
+      buscar();
+    };
+    el("janelas").appendChild(b);
+  });
+
+  iniciarMapa();
+  buscar();
+  setInterval(buscar, INTERVALO_MS);
+  setInterval(tiquetaque, 1000);
+}
+
+function iniciarMapa() {
+  mapa = L.map("mapa").setView([-20.3155, -40.3128], 13);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap"
+  }).addTo(mapa);
+  mapa.on("dragstart", () => { seguir = false; });
+  el("b-centrar").onclick = () => {
+    seguir = true;
+    if (marca) mapa.setView(marca.getLatLng(), Math.max(mapa.getZoom(), 16));
+  };
+}
+
+async function buscar() {
+  try {
+    aparelhos = await carregarAparelhos();
+    faixa(null);
+  } catch (e) {
+    faixa(e.message);
+    return;
+  }
+
+  if (!alvo && aparelhos.length) {
+    alvo = { grupo: aparelhos[0].grupo, dispositivo: aparelhos[0].dispositivo };
+  }
+  desenharLista();
+
+  if (!alvo) { el("cab-titulo").textContent = "Nenhum aparelho ainda"; return; }
+
+  let pontos;
+  try {
+    pontos = (await carregarPontos(alvo.grupo, alvo.dispositivo)) || [];
+  } catch (e) {
+    faixa(e.message);
+    return;
+  }
+  desenharMapa(pontos);
+}
+
+function desenharLista() {
+  const c = el("lista");
+  c.innerHTML = "";
+  if (!aparelhos.length) {
+    c.innerHTML = '<p style="font-size:14px;line-height:1.5;color:var(--suave);padding:8px 2px">'
+      + 'Nenhum aparelho enviou dados ainda. Ligue o rastreio no app do celular.</p>';
+    return;
+  }
+
+  const grupos = [];
+  aparelhos.forEach((a) => { if (grupos.indexOf(a.grupo) < 0) grupos.push(a.grupo); });
+
+  grupos.forEach((g) => {
+    const t = document.createElement("div");
+    t.className = "secao";
+    t.textContent = g;
+    c.appendChild(t);
+
+    aparelhos.filter((a) => a.grupo === g).forEach((a) => {
+      const on = alvo && alvo.grupo === g && alvo.dispositivo === a.dispositivo;
+      const d = document.createElement("div");
+      d.className = "item" + (on ? " on" : "");
+      d.innerHTML = '<span class="bola" style="background:' + corPor(a.hora) + '"></span>'
+        + '<div><div class="nome"></div><div class="sub"></div></div>';
+      d.querySelector(".nome").textContent = a.dispositivo;
+      d.querySelector(".sub").textContent =
+        relogio(a.hora) + " · há " + haQuanto(a.hora) + " · " + a.total + " pts";
+      d.onclick = () => {
+        alvo = { grupo: g, dispositivo: a.dispositivo };
+        primeira = true; seguir = true; buscar();
+      };
+      c.appendChild(d);
+    });
+  });
+}
+
+function desenharMapa(pontos) {
+  el("v-qtd").textContent = pontos.length;
+
+  if (!pontos.length) {
+    el("cab-titulo").textContent = alvo.dispositivo + " · sem pontos no período";
+    el("pulso").classList.remove("on");
+    ["v-hora", "v-atraso", "v-vel", "v-prec"].forEach((i) => el(i).textContent = "—");
+    return;
+  }
+
+  const coords = pontos.map((p) => [p.lat, p.lng]);
+  const u = pontos[pontos.length - 1];
+  const atrasoMin = (Date.now() - new Date(u.hora).getTime()) / 60000;
+
+  if (trilha) trilha.remove();
+  trilha = L.polyline(coords, { color: "#16202B", weight: 3, opacity: .55, lineJoin: "round" }).addTo(mapa);
+
+  if (halo) halo.remove();
+  if (u.precisao) {
+    halo = L.circle([u.lat, u.lng], {
+      radius: u.precisao, color: "#2E7D74", fillColor: "#2E7D74", fillOpacity: .12, weight: 1
+    }).addTo(mapa);
+  }
+
+  if (marca) marca.remove();
+  marca = L.marker([u.lat, u.lng], {
+    icon: L.divIcon({ className: "", html: '<div class="atual"></div>', iconSize: [18, 18], iconAnchor: [9, 9] })
+  }).addTo(mapa);
+
+  if (primeira) {
+    mapa.fitBounds(trilha.getBounds(), { padding: [40, 40], maxZoom: 17 });
+    primeira = false;
+  } else if (seguir) {
+    mapa.panTo([u.lat, u.lng]);
+  }
+
+  const vivo = atrasoMin < 3;
+  el("pulso").classList.toggle("on", vivo);
+  el("cab-titulo").textContent = alvo.dispositivo + " · "
+    + (vivo ? "ao vivo" : atrasoMin < 30 ? "atrasado" : "sem sinal");
+
+  el("v-hora").textContent = relogio(u.hora);
+  el("v-atraso").textContent = haQuanto(u.hora);
+  el("v-atraso").style.color = corPor(u.hora);
+  el("v-vel").textContent = (u.velocidade != null && u.velocidade >= 0)
+    ? (u.velocidade * 3.6).toFixed(0) + " km/h" : "—";
+  el("v-prec").textContent = u.precisao ? Math.round(u.precisao) + " m" : "—";
+}
+
+function tiquetaque() {
+  if (!alvo) return;
+  const a = aparelhos.find((x) => x.grupo === alvo.grupo && x.dispositivo === alvo.dispositivo);
+  if (!a) return;
+  el("v-atraso").textContent = haQuanto(a.hora);
+  el("v-atraso").style.color = corPor(a.hora);
+}
+
+/* ---------------- início ---------------- */
+
+const salvo = recuperar();
+if (salvo && salvo.nome && salvo.senha) {
+  acesso = salvo;
+  abrirPainel();
+} else {
+  el("i-nome").focus();
+}
+</script>
+</body>
+</html>
