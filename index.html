@@ -525,17 +525,27 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
 
   const trechos = calcularTrechos(ps, { ...opcoes, agora });
   const ultimo = trechos[trechos.length - 1];
-  const emMovimento = ultimo.tipo === "movimento";
-  const paradoMs = emMovimento ? null : agora - ultimo.inicio;
+  const sinal = calcularSinal(emMs(ps[ps.length - 1]), agora);
+
+  // Sem notícia há tempo demais (item 3), não dá para seguir afirmando "em
+  // movimento" só porque o relógio passou do prazo de 60 s: essa inferência
+  // vale para quem saiu e ainda dá notícia, não para quem sumiu de vez. Sem
+  // sinal, cai nas regras normais de parado (item 4), contando desde a
+  // última posição que se tem de fato.
+  const emMovimento = ultimo.tipo === "movimento" && !sinal.mudo;
+  const desde = emMovimento ? ultimo.inicio : (sinal.mudo ? emMs(ps[ps.length - 1]) : ultimo.inicio);
+  const paradoMs = emMovimento ? null : agora - desde;
 
   return {
     // Parado, o pin fica na âncora: é o lugar, não a última tremida do GPS.
-    posicao: emMovimento ? ps[ps.length - 1] : ultimo.ancora,
+    // Sem âncora (trecho de movimento que virou "sem sinal"), fica na
+    // última posição conhecida.
+    posicao: emMovimento ? ps[ps.length - 1] : (ultimo.ancora || ps[ps.length - 1]),
     emMovimento,
-    desde: ultimo.inicio,
+    desde,
     paradoMs,
     farol: farolDe(paradoMs / 60000, emMovimento),
-    sinal: calcularSinal(emMs(ps[ps.length - 1]), agora),
+    sinal,
     trechos,
   };
 }
@@ -556,7 +566,10 @@ function duracao(ms) {
  */
 function textoStatus(estado) {
   if (!estado || !estado.posicao) return "Sem dados";
-  if (estado.emMovimento) return "Em movimento";
+  if (estado.sinal && estado.sinal.mudo) {
+    return "Sem sinal há " + duracao(estado.sinal.minutos * 60000);
+  }
+  if (estado.emMovimento) return "Em Deslocamento";
   return "Parado há " + duracao(estado.paradoMs);
 }
 
