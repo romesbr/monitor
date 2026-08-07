@@ -115,6 +115,39 @@ main{position:relative;min-height:0}
 .cercas-barra button:disabled{opacity:.4;cursor:default}
 .dica{font-size:12px;color:var(--suave);max-width:280px}
 
+/* ---- contato com o servidor (CONTEXTO-VTU 2 e 5.4) ----
+   O painel fica ligado o dia inteiro ao lado do programador. Uma tela que
+   parou de atualizar tem exatamente a mesma cara de uma tela em que nada
+   se mexeu — e confundir as duas é o erro mais caro deste painel. Por isso
+   a idade do dado é escrita, sempre, e fica amarela quando envelhece. */
+.contato{display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--suave);white-space:nowrap}
+.contato .ponto{width:8px;height:8px;border-radius:50%;background:var(--vivo);flex:none}
+.contato.velho{color:var(--morno);font-weight:600}
+.contato.velho .ponto{background:var(--morno)}
+.contato.perdido{color:var(--frio);font-weight:600}
+.contato.perdido .ponto{background:var(--frio)}
+
+/* ---- modo painel de parede ----
+   Não é enfeite: a tela é lida de alguns metros, de pé, por quem está no
+   meio de outra coisa. O que encolhe (timeline, botões, coordenada) é o que
+   ninguém opera a essa distância; o que cresce é o que se lê de longe. */
+body.parede .tempo,
+body.parede .cercas-barra,
+body.parede .dica{display:none}
+body.parede #painel.ver{grid-template-columns:400px 1fr;grid-template-rows:auto 1fr auto}
+body.parede header{padding:16px 22px}
+body.parede header h1{font-size:28px}
+body.parede aside{padding:18px}
+body.parede .item{padding:14px 12px}
+body.parede .item .nome{font-size:22px}
+body.parede .item .campo{font-size:16px;margin-top:5px}
+body.parede .bola{width:15px;height:15px;margin-top:8px}
+body.parede .contato{font-size:14px}
+body.parede .detalhe h2{font-size:28px}
+body.parede .linha-campo{font-size:17px;padding:10px 0}
+body.parede .faixa{font-size:16px}
+
 @media (max-width:760px){
   #painel.ver{grid-template-columns:1fr;grid-template-rows:auto 1fr auto auto}
   aside{border-right:none;border-top:1px solid var(--linha);max-height:40vh;order:4}
@@ -164,6 +197,7 @@ main{position:relative;min-height:0}
       <h1 id="cab-titulo">Aguardando dados</h1>
     </div>
     <div class="cabeca-dir">
+      <span class="contato" id="contato"><span class="ponto"></span><span id="contato-txt">—</span></span>
       <span class="dica" id="dica-cerca"></span>
       <div class="cercas-barra" id="cercas-barra">
         <button class="fantasma" id="b-nova-cerca">Nova cerca</button>
@@ -172,6 +206,7 @@ main{position:relative;min-height:0}
         <button class="fantasma" id="b-salvar">Salvar cerca</button>
       </div>
       <button class="fantasma" id="b-centrar">Ver todos</button>
+      <button class="fantasma" id="b-parede">Painel</button>
       <button class="fantasma" id="b-sair">Sair</button>
     </div>
   </header>
@@ -193,7 +228,7 @@ main{position:relative;min-height:0}
 
 <script>
 /* NUCLEO:INICIO — gerado por rastreio/ferramentas/embutir.js
-   Não edite aqui: mexa em src/trilha.js, src/paradas.js, src/cercas.js, no repositório do app,
+   Não edite aqui: mexa em src/trilha.js, src/tempo.js, src/paradas.js, src/vinculos.js, src/cercas.js, no repositório do app,
    e rode o script de novo. O que for escrito à mão neste trecho
    se perde na próxima geração. */
 
@@ -217,6 +252,31 @@ const RAIO_PARADA = 20;                // m
 const EXCURSAO_MAX_MS = 5 * 60 * 1000; // os "poucos minutos"
 const PASSO_MARCA = 500;               // m entre os marcos da rota
 
+/**
+ * A leitura crua, guardada mas fora da geometria (CONTEXTO-VTU 5.6).
+ *
+ * A regra de gravação só transforma em ponto o que andou 50 m ou o que
+ * marcou os 10 min de vida; o resto era descartado e não existia em lugar
+ * nenhum. Numa manobra de pátio — poucos metros, muitas paradas — isso
+ * apaga justamente o movimento que se quer medir, e depois do teste em
+ * campo não há como responder se um limiar menor teria captado. Agora a
+ * leitura descartada é gravada com este tipo.
+ *
+ * Ela NÃO entra em nada que desenhe ou decida: nem no traçado, nem nas
+ * paradas, nem no farol. Se entrasse, mudaria a regra que o teste existe
+ * para avaliar, e a comparação perderia o sentido. Entra só onde prova que
+ * o aparelho estava vivo — sinal e cobertura — porque para isso ela vale
+ * tanto quanto qualquer outra.
+ */
+const TIPO_BRUTO = "bruto";
+
+const eBruto = (p) => p != null && p.tipo === TIPO_BRUTO;
+
+/** Só o que a regra de gravação aprovou: é isto que vira linha e parada. */
+function semBrutos(pontos) {
+  return (pontos || []).filter((p) => !eBruto(p));
+}
+
 const RAIO_TERRA = 6371000;
 
 /** Distância em metros entre duas leituras (haversine). */
@@ -228,6 +288,22 @@ function distancia(a, b) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
   return 2 * RAIO_TERRA * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+/**
+ * Rumo de a para b, em graus (0 = norte, 90 = leste). Serve para virar a
+ * setinha do marco de percurso na direção em que o aparelho seguia: num pátio
+ * de manobra, saber se a locomotiva ia ou voltava pelo mesmo trilho é metade
+ * da leitura da rota.
+ */
+function rumoEntre(a, b) {
+  const rad = Math.PI / 180;
+  const dLng = (b.lng - a.lng) * rad;
+  const y = Math.sin(dLng) * Math.cos(b.lat * rad);
+  const x =
+    Math.cos(a.lat * rad) * Math.sin(b.lat * rad) -
+    Math.sin(a.lat * rad) * Math.cos(b.lat * rad) * Math.cos(dLng);
+  return (Math.atan2(y, x) * (180 / Math.PI) + 360) % 360;
 }
 
 /** Instante da leitura. Só cai no criado_em se "hora" vier vazia. */
@@ -250,14 +326,25 @@ function ordenarPorHora(pontos) {
 }
 
 /**
- * Leituras em condição de dizer alguma coisa sobre geometria: na ordem certa
- * e sem as imprecisas. Serve tanto ao desenho quanto ao cálculo de paradas —
- * leitura torta inventa movimento que não houve.
+ * Leituras em condição de dizer alguma coisa sobre geometria: na ordem certa,
+ * sem as imprecisas e sem as cruas. Serve tanto ao desenho quanto ao cálculo
+ * de paradas — leitura torta inventa movimento que não houve, e leitura crua
+ * mudaria a regra dos 50 m por baixo do pano.
  */
 function leiturasBoas(pontos, precisaoMax = PRECISAO_MAX) {
-  return ordenarPorHora(pontos).filter(
+  return ordenarPorHora(semBrutos(pontos)).filter(
     (p) => p.precisao == null || p.precisao <= precisaoMax
   );
+}
+
+/**
+ * Toda leitura que chegou, crua ou não, precisa ou não. É a lista de
+ * CONTATOS: cada uma prova que o aparelho estava vivo e falando naquele
+ * instante, que é o que sinal (item 3) e cobertura (CONTEXTO-VTU 5.2)
+ * precisam saber. Silêncio é ninguém falar, não é falar torto.
+ */
+function contatos(pontos) {
+  return ordenarPorHora(pontos);
 }
 
 /**
@@ -322,10 +409,31 @@ function removerExcursoes(grupos, raioParada, janelaMs) {
  * Interpola porque o marco quase nunca cai em cima de um vértice: com um
  * ponto a cada 50 m, o de 500 m fica no meio de um trecho.
  */
-function marcosDeDistancia(trilha, passo = PASSO_MARCA) {
+function comprimentoDaTrilha(trilha) {
+  let total = 0;
+  for (let i = 1; i < trilha.length; i++) total += distancia(trilha[i - 1], trilha[i]);
+  return total;
+}
+
+/**
+ * O passo de 500 m é grande demais para percurso curto: uma manobra de pátio
+ * inteira cabe entre dois marcos, e a rota fica sem nenhum. Rota curta ganha
+ * marco mais miúdo, para que sempre haja o que ler ao longo do traço. O teto
+ * continua sendo PASSO_MARCA — em viagem longa, marco de 100 em 100 m viraria
+ * um colar de contas.
+ */
+function passoDosMarcos(trilha, passoMax = PASSO_MARCA) {
+  const total = comprimentoDaTrilha(trilha);
+  if (total < 1000) return 100;
+  if (total < 5000) return 250;
+  return passoMax;
+}
+
+function marcosDeDistancia(trilha, passo) {
+  const usado = passo ?? passoDosMarcos(trilha);
   const marcos = [];
   let acumulado = 0;
-  let proximo = passo;
+  let proximo = usado;
 
   for (let i = 1; i < trilha.length; i++) {
     const d = distancia(trilha[i - 1], trilha[i]);
@@ -336,8 +444,10 @@ function marcosDeDistancia(trilha, passo = PASSO_MARCA) {
         lng: trilha[i - 1].lng + (trilha[i].lng - trilha[i - 1].lng) * fracao,
         hora: trilha[i].hora,
         metros: proximo,
+        // Para onde ia: é o que orienta a setinha do marco no mapa.
+        rumo: rumoEntre(trilha[i - 1], trilha[i]),
       });
-      proximo += passo;
+      proximo += usado;
     }
     acumulado += d;
   }
@@ -370,6 +480,123 @@ function prepararTrilha(pontos, opcoes = {}) {
     trilha: limpos.map((g) => g.ancora),
     atual: bons[bons.length - 1],
   };
+}
+
+/* ---------- src/tempo.js ---------- */
+
+/**
+ * Horário local, num lugar só (CONTEXTO-VTU 5.7).
+ *
+ * O banco grava em UTC, e está certo: UTC não tem horário de verão nem
+ * ambiguidade. O problema é a leitura. Um relatório operacional é lido em
+ * horário de Brasília, e o turno que vira a meia-noite é onde a diferença
+ * deixa de ser detalhe: um ponto das 22h de Vitória cai no DIA SEGUINTE em
+ * UTC, e o somatório por dia parte o turno no meio sem avisar ninguém.
+ *
+ * A armadilha maior não é o UTC, é o `toLocaleString` sem fuso: ele usa o
+ * relógio da MÁQUINA que está mostrando. O celular do pátio acerta por
+ * acaso; um servidor, um Codespaces ou um painel com o fuso errado mostram
+ * outra hora com a mesma cara de certo. Aqui o fuso é escrito, não herdado.
+ *
+ * Regra prática: nenhum arquivo chama toLocaleString direto. Passa por aqui.
+ */
+
+/** O fuso da operação. É de Vitória (ES) que se lê este painel. */
+const FUSO = "America/Sao_Paulo";
+
+const nada = "—";
+// O nome é comprido de propósito: embutido no site, este arquivo divide o
+// escopo global com trilha.js, que já tem um "valido" para ponto do mapa.
+const instanteValido = (ms) => ms != null && Number.isFinite(Number(ms));
+
+/** Aceita tanto milissegundos quanto o texto ISO que o servidor devolve. */
+function paraMs(valor) {
+  if (valor == null) return null;
+  if (typeof valor === "number") return Number.isFinite(valor) ? valor : null;
+  const t = Date.parse(valor);
+  return Number.isNaN(t) ? null : t;
+}
+
+/** "14:32" */
+function horaLocal(valor) {
+  const ms = paraMs(valor);
+  if (!instanteValido(ms)) return nada;
+  return new Date(ms).toLocaleTimeString("pt-BR", {
+    hour: "2-digit", minute: "2-digit", timeZone: FUSO,
+  });
+}
+
+/** "07/08" — dia e mês, para quando o ano é óbvio pelo contexto. */
+function diaCurto(valor) {
+  const ms = paraMs(valor);
+  if (!instanteValido(ms)) return nada;
+  return new Date(ms).toLocaleDateString("pt-BR", {
+    day: "2-digit", month: "2-digit", timeZone: FUSO,
+  });
+}
+
+/** "qua, 07/08 14:32" — o rótulo da timeline. */
+function dataHoraLocal(valor) {
+  const ms = paraMs(valor);
+  if (!instanteValido(ms)) return nada;
+  return new Date(ms).toLocaleString("pt-BR", {
+    weekday: "short", day: "2-digit", month: "2-digit",
+    hour: "2-digit", minute: "2-digit", timeZone: FUSO,
+  });
+}
+
+/** "07/08/2026 14:32" — o carimbo completo, para exportação e conferência. */
+function carimboLocal(valor) {
+  const ms = paraMs(valor);
+  if (!instanteValido(ms)) return nada;
+  return new Date(ms).toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: FUSO,
+  });
+}
+
+/**
+ * A chave de agrupamento por dia: "2026-08-07", já no fuso da operação.
+ *
+ * O truque do locale "en-CA" é o jeito curto de pedir ano-mês-dia com zero à
+ * esquerda; o que importa mesmo é o timeZone, que faz 07/08 23h30 de Vitória
+ * continuar sendo 07/08 e não virar 08/08. Ordena como texto, o que é
+ * conveniente: agrupar e ordenar por dia viram a mesma coisa.
+ */
+function diaLocal(valor) {
+  const ms = paraMs(valor);
+  if (!instanteValido(ms)) return null;
+  return new Date(ms).toLocaleDateString("en-CA", { timeZone: FUSO });
+}
+
+/**
+ * O começo do dia local, em milissegundos. Serve para recortar "o turno de
+ * hoje" sem depender do relógio de quem está olhando.
+ *
+ * Feito por diferença medida, não por soma de fuso fixo: o deslocamento do
+ * Brasil já mudou por decreto antes e pode mudar de novo, e uma constante
+ * de -3h envelheceria calada.
+ */
+function inicioDoDiaLocal(valor) {
+  const ms = paraMs(valor) ?? Date.now();
+  const dia = diaLocal(ms);
+  if (!dia) return null;
+  // Meia-noite daquele dia, primeiro lida como se fosse UTC...
+  const comoUtc = Date.parse(dia + "T00:00:00Z");
+  // ...e depois corrigida pelo quanto o fuso local estava deslocado ali.
+  return comoUtc + deslocamentoMs(comoUtc);
+}
+
+/** Quanto o fuso da operação está atrás/à frente do UTC naquele instante. */
+function deslocamentoMs(ms) {
+  const d = new Date(ms);
+  // "07/08/2026, 21:00:00" no fuso alvo, relido como se fosse UTC: a
+  // diferença para o instante original é exatamente o deslocamento.
+  const local = new Date(
+    d.toLocaleString("en-US", { timeZone: FUSO })
+  ).getTime();
+  const utc = new Date(d.toLocaleString("en-US", { timeZone: "UTC" })).getTime();
+  return utc - local;
 }
 
 /* ---------- src/paradas.js ---------- */
@@ -481,6 +708,46 @@ function calcularTrechos(pontos, opcoes = {}) {
   return trechos;
 }
 
+/**
+ * Os buracos de contato ao longo do histórico (item 3, mesmo prazo do sinal).
+ *
+ * Existe porque a linha da rota mente por omissão: dois pontos ligados por um
+ * traço reto têm a mesma aparência quer estejam separados por um minuto ou por
+ * duas horas. Sem marcar o buraco, um trecho em que o aparelho sumiu vira
+ * "passou por aqui" no mapa, e ninguém tem como saber que aquilo é chute.
+ *
+ * Conta com TODA leitura que chegou, não só as boas: leitura torta é imprecisa,
+ * mas prova que o aparelho estava vivo e falando. Silêncio é ninguém falar.
+ *
+ * A posição do marco é o meio do caminho entre a última notícia e a primeira
+ * depois dela — que é, literalmente, onde não se sabe o que houve.
+ */
+function trechosDeSilencio(pontos, opcoes = {}) {
+  const { silencioMs = SINAL_MUDO_MIN * 60000 } = opcoes;
+  const ps = ordenarPorHora(pontos);
+  const buracos = [];
+
+  for (let i = 1; i < ps.length; i++) {
+    const inicio = emMs(ps[i - 1]);
+    const fim = emMs(ps[i]);
+    if (fim - inicio < silencioMs) continue;
+    buracos.push({
+      tipo: "silencio",
+      inicio,
+      fim,
+      duracaoMs: fim - inicio,
+      de: { lat: ps[i - 1].lat, lng: ps[i - 1].lng },
+      para: { lat: ps[i].lat, lng: ps[i].lng },
+      lat: (ps[i - 1].lat + ps[i].lat) / 2,
+      lng: (ps[i - 1].lng + ps[i].lng) / 2,
+      // Quanto o aparelho andou enquanto ninguém via. Distância grande com
+      // silêncio longo é o caso em que o traço reto mais engana.
+      metros: distancia(ps[i - 1], ps[i]),
+    });
+  }
+  return buracos;
+}
+
 function farolDe(paradoMin, emMovimento) {
   if (emMovimento) return "azul";
   if (paradoMin < FAROL_AMARELO_MIN) return "verde";
@@ -507,25 +774,35 @@ function calcularSinal(ultimaMs, agora = Date.now()) {
  */
 function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
   const ps = leiturasBoas(pontos, opcoes.precisaoMax).filter((p) => emMs(p) <= agora);
-  const todas = (pontos || []).filter((p) => emMs(p) <= agora);
+  const todas = contatos(pontos).filter((p) => emMs(p) <= agora);
   const ultimaConhecida = todas.length ? todas[todas.length - 1] : null;
+
+  // O sinal mede CONTATO, não geometria: vale toda leitura que chegou, mesmo
+  // a torta e mesmo a crua. Uma leitura imprecisa não serve para dizer onde o
+  // aparelho está, mas prova que ele estava vivo e falando — e é isso que a
+  // pergunta "tem sinal?" quer saber. Medir o sinal só pelas leituras boas
+  // fazia um aparelho falante porém impreciso aparecer como mudo, e nesta
+  // operação silêncio é gatilho de verificação (CONTEXTO-VTU 2).
+  const ultimoContatoMs = ultimaConhecida ? emMs(ultimaConhecida) : null;
+  const sinal = calcularSinal(ultimoContatoMs, agora);
 
   if (!ps.length) {
     // Sem leitura boa o pin ainda tem de aparecer, na última posição conhecida.
     return {
       posicao: ultimaConhecida,
+      ultimaPosicao: ultimaConhecida,
+      ultimoContatoMs,
       emMovimento: false,
       desde: null,
       paradoMs: null,
       farol: "verde",
-      sinal: calcularSinal(ultimaConhecida ? emMs(ultimaConhecida) : null, agora),
+      sinal,
       trechos: [],
     };
   }
 
   const trechos = calcularTrechos(ps, { ...opcoes, agora });
   const ultimo = trechos[trechos.length - 1];
-  const sinal = calcularSinal(emMs(ps[ps.length - 1]), agora);
 
   // Sem notícia há tempo demais (item 3), não dá para seguir afirmando "em
   // movimento" só porque o relógio passou do prazo de 60 s: essa inferência
@@ -541,6 +818,11 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
     // Sem âncora (trecho de movimento que virou "sem sinal"), fica na
     // última posição conhecida.
     posicao: emMovimento ? ps[ps.length - 1] : (ultimo.ancora || ps[ps.length - 1]),
+    // A última posição de fato lida, sem âncora nem arredondamento. É o que
+    // o painel mostra com hora ao lado, para ninguém confundir mapa parado
+    // no tempo com locomotiva parada no pátio (CONTEXTO-VTU 5.3).
+    ultimaPosicao: ultimaConhecida,
+    ultimoContatoMs,
     emMovimento,
     desde,
     paradoMs,
@@ -548,6 +830,83 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
     sinal,
     trechos,
   };
+}
+
+/**
+ * Cobertura do rastreio no período (CONTEXTO-VTU 5.2).
+ *
+ * Existe porque todo número que sair daqui vai ser questionado, e "a loco
+ * ficou 3h40 parada" só se sustenta se der para responder se o rastreio
+ * estava vivo essas 3h40 inteiras. Sem denominador, silêncio vira "parado" e
+ * infla o total a favor de quem cobra — o que destrói a credibilidade na
+ * primeira contestação, que é pior do que não ter o número.
+ *
+ * A conta: o período é coberto onde duas notícias seguidas estão a menos de
+ * SINAL_MUDO_MIN uma da outra. Qualquer intervalo maior é buraco, e o buraco
+ * conta inteiro, não descontado do prazo — os 15 min são o limiar para
+ * chamar de buraco, não uma franquia de silêncio que sai de graça.
+ *
+ * Vale toda leitura, inclusive a crua e a imprecisa: o que se mede aqui é o
+ * rastreio estar vivo, não a qualidade da posição.
+ *
+ * Uma nota de honestidade que o painel precisa repetir: o buffer local faz o
+ * ponto subir atrasado, com a hora certa. Então a cobertura de um período
+ * recente pode melhorar sozinha quando o aparelho reencontra internet. Ela é
+ * definitiva para o passado, provisória para a última hora.
+ */
+function cobertura(pontos, inicio, fim, opcoes = {}) {
+  const { silencioMs = SINAL_MUDO_MIN * 60000 } = opcoes;
+  const janelaMs = Math.max(0, (fim ?? 0) - (inicio ?? 0));
+  const vazio = {
+    janelaMs, cobertoMs: 0, mudoMs: janelaMs,
+    percentual: janelaMs ? 0 : null, buracos: [],
+  };
+  if (!janelaMs) return { ...vazio, mudoMs: 0 };
+
+  const marcos = contatos(pontos).map(emMs).filter(Number.isFinite);
+  const anteriores = marcos.filter((t) => t < inicio);
+  const dentro = marcos.filter((t) => t >= inicio && t <= fim);
+
+  const buracos = [];
+  let mudoMs = 0;
+  const marcar = (de, ate) => {
+    const a = Math.max(de, inicio);
+    const b = Math.min(ate, fim);
+    if (b <= a) return;
+    mudoMs += b - a;
+    buracos.push({ inicio: a, fim: b, duracaoMs: b - a });
+  };
+
+  // A última notícia ANTES da janela conta: um turno que começa 3 min depois
+  // do último ponto do turno anterior começa coberto, não no escuro.
+  let anterior = anteriores.length ? anteriores[anteriores.length - 1] : null;
+
+  for (const t of dentro) {
+    if (anterior == null) {
+      if (t - inicio > silencioMs) marcar(inicio, t);
+    } else if (t - anterior > silencioMs) {
+      marcar(anterior, t);
+    }
+    anterior = t;
+  }
+
+  if (anterior == null) marcar(inicio, fim);
+  else if (fim - anterior > silencioMs) marcar(anterior, fim);
+
+  const cobertoMs = Math.max(0, janelaMs - mudoMs);
+  return {
+    janelaMs,
+    cobertoMs,
+    mudoMs,
+    percentual: (cobertoMs / janelaMs) * 100,
+    buracos,
+  };
+}
+
+/** "94% do período" — como a cobertura aparece ao lado de um total. */
+function textoCobertura(c) {
+  if (!c || c.percentual == null) return "—";
+  return Math.round(c.percentual) + "% do período";
 }
 
 /** "2h07", "14min", "45s" — o formato que aparece no status e nos balões. */
@@ -593,6 +952,95 @@ function resumoPorLugar(trechos, nomear = coordenada) {
     lugares.set(nome, atual);
   }
   return [...lugares.values()].sort((a, b) => b.total - a.total);
+}
+
+/* ---------- src/vinculos.js ---------- */
+
+/**
+ * Identidade do ativo: qual locomotiva estava neste celular, e quando
+ * (CONTEXTO-VTU 5.1).
+ *
+ * No pátio ninguém pergunta onde está o celular — perguntam onde está a
+ * locomotiva, pelo prefixo. Mas o celular troca de máquina: o mesmo aparelho
+ * pode ir para outra loco na semana seguinte. Se o prefixo fosse um campo
+ * que se sobrescreve, o histórico antigo passaria a mentir sobre qual
+ * máquina fez aquele percurso — e um histórico que mente é pior do que
+ * nenhum, porque ninguém sabe qual pedaço acreditar.
+ *
+ * Por isso o vínculo tem vigência: vale de um instante até outro, e o
+ * passado fica congelado. Perguntar "de quem era este ponto?" é perguntar
+ * pelo instante do ponto, nunca pelo vínculo de agora.
+ *
+ * Formato que vem do servidor:
+ *   { id, grupo, dispositivo, prefixo, de, ate }   ate = null → ainda vale
+ */
+
+
+/** Todos os vínculos daquele aparelho, do mais novo para o mais velho. */
+function vinculosDe(vinculos, grupo, dispositivo) {
+  return (vinculos || [])
+    .filter(
+      (v) =>
+        v &&
+        v.dispositivo === dispositivo &&
+        (grupo == null || v.grupo == null || v.grupo === grupo)
+    )
+    .slice()
+    .sort((a, b) => (paraMs(b.de) ?? 0) - (paraMs(a.de) ?? 0));
+}
+
+/**
+ * O vínculo que valia naquele instante. Como a lista vem do mais novo para o
+ * mais velho, o primeiro que couber é o certo: vínculos da mesma máquina não
+ * se sobrepõem (quem abre um novo fecha o anterior, no banco).
+ */
+function vinculoEm(vinculos, grupo, dispositivo, ms = Date.now()) {
+  const quando = paraMs(ms) ?? Date.now();
+  for (const v of vinculosDe(vinculos, grupo, dispositivo)) {
+    const de = paraMs(v.de);
+    const ate = paraMs(v.ate);
+    if (de != null && quando < de) continue;
+    if (ate != null && quando >= ate) continue;
+    return v;
+  }
+  return null;
+}
+
+/** O prefixo da loco naquele instante, ou null se não havia vínculo. */
+function prefixoEm(vinculos, grupo, dispositivo, ms = Date.now()) {
+  const v = vinculoEm(vinculos, grupo, dispositivo, ms);
+  return v ? v.prefixo : null;
+}
+
+/**
+ * O que aparece na tela como nome do ativo: o prefixo da loco, e o nome do
+ * aparelho só enquanto não houver loco vinculada. A tela nunca inventa um
+ * prefixo — sem vínculo, ela diz o que sabe, que é o nome do celular.
+ */
+function rotuloAtivo(vinculos, grupo, dispositivo, ms = Date.now()) {
+  return prefixoEm(vinculos, grupo, dispositivo, ms) || dispositivo;
+}
+
+/** Se o rótulo é a loco de verdade ou o nome do celular servindo de quebra-galho. */
+const temLoco = (vinculos, grupo, dispositivo, ms = Date.now()) =>
+  prefixoEm(vinculos, grupo, dispositivo, ms) != null;
+
+/**
+ * Vínculo aberto de um prefixo em qualquer aparelho. Serve para avisar antes
+ * de criar: a mesma loco vinculada a dois celulares ao mesmo tempo faria dois
+ * pins com o mesmo nome, e o painel não teria como dizer qual acreditar.
+ */
+function abertoDoPrefixo(vinculos, prefixo) {
+  const alvo = String(prefixo || "").trim().toLowerCase();
+  if (!alvo) return null;
+  return (
+    (vinculos || []).find(
+      (v) =>
+        v &&
+        v.ate == null &&
+        String(v.prefixo || "").trim().toLowerCase() === alvo
+    ) || null
+  );
 }
 
 /* ---------- src/cercas.js ---------- */
@@ -751,8 +1199,15 @@ let historico = new Map();// chave -> pontos crus dos últimos 7 dias
 let selecionado = null;   // chave do ativo aberto, ou null
 let instante = null;      // null = agora; número = momento da timeline
 let cercas = [];          // os lugares com nome (item 7)
+let vinculos = [];        // qual loco em qual celular, e quando (CONTEXTO-VTU 5.1)
 let desenhando = null;    // vértices da cerca em construção, ou null
 let mapa, pins = new Map(), camadaRota = null, camadaCercas = null, enquadrado = false;
+
+/* Quando o servidor respondeu pela última vez, e o que ele disse se falhou.
+   O painel de parede fica ligado sozinho: sem isto, uma queda de rede deixa
+   a tela igualzinha a um pátio parado (CONTEXTO-VTU 2 e 5.4). */
+let ultimoContatoServidor = null;
+let falhaAtual = null;
 
 const el = (id) => document.getElementById(id);
 const chaveDe = (a) => a.grupo + "\u0000" + a.dispositivo;
@@ -836,6 +1291,46 @@ const salvarCerca = (nome, pontos) =>
 const removerCerca = (id) =>
   rpc("apagar_cerca", { p_nome: acesso.nome, p_senha: acesso.senha, p_id: id });
 
+/* ---------------- vínculo com a locomotiva (CONTEXTO-VTU 5.1) ----------------
+   No pátio ninguém pergunta onde está o celular: perguntam onde está a loco,
+   pelo prefixo. Mas o celular troca de máquina, então o vínculo tem vigência
+   e o histórico antigo continua apontando para a loco certa.
+
+   Criar e encerrar exige senha de FAMÍLIA, como as cercas. É registro que o
+   histórico inteiro passa a citar — não pode depender de quem está com o
+   aparelho na mão.
+--------------------------------------------------------------------------- */
+
+async function carregarVinculos() {
+  try {
+    return (await rpc(
+      acesso.tipo === "familia" ? "listar_vinculos_familia" : "listar_vinculos",
+      { p_nome: acesso.nome, p_senha: acesso.senha }
+    )) || [];
+  } catch (e) {
+    // Sem o sql/vtu.sql colado no painel a função não existe. O monitor
+    // continua inteiro, mostrando o nome do aparelho.
+    return [];
+  }
+}
+
+const podeEditarVinculos = () => acesso && acesso.tipo === "familia";
+
+const criarVinculo = (grupo, dispositivo, prefixo) =>
+  rpc("vincular_loco", {
+    p_nome: acesso.nome, p_senha: acesso.senha,
+    p_grupo: grupo, p_dispositivo: dispositivo, p_prefixo: prefixo, p_de: null,
+  });
+
+const fecharVinculo = (id) =>
+  rpc("encerrar_vinculo", {
+    p_nome: acesso.nome, p_senha: acesso.senha, p_id: id, p_ate: null,
+  });
+
+/** O nome do ativo na tela, no instante que a timeline está mostrando. */
+const rotuloDe = (chave) =>
+  rotuloAtivo(vinculos, grupoDe(chave), nomeDe(chave), relogioAtual());
+
 /* ---------------- histórico guardado no navegador ----------------
    O servidor só sabe devolver "as últimas N horas". Baixar os 7 dias de
    todos os aparelhos a cada 15 segundos seria absurdo, então cada ativo
@@ -879,17 +1374,13 @@ const estadoDe = (chave) => estadoAtual(historico.get(chave) || [], relogioAtual
 
 /* ---------------- utilidades de texto ---------------- */
 
-function relogio(iso) {
-  return iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—";
-}
-function relogioMs(ms) {
-  return ms ? new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—";
-}
-function diaEHora(ms) {
-  return new Date(ms).toLocaleString("pt-BR", {
-    weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
-  });
-}
+/* As três delegam para o núcleo (src/tempo.js), que escreve o fuso em vez de
+   herdar o do computador. O painel do pátio acerta por acaso; qualquer
+   máquina com o fuso errado mostrava outra hora com a mesma cara de certa,
+   e turno que vira a meia-noite era agrupado no dia errado sem avisar. */
+function relogio(iso) { return horaLocal(iso); }
+function relogioMs(ms) { return horaLocal(ms); }
+function diaEHora(ms) { return dataHoraLocal(ms); }
 function guardar(a){ try{ localStorage.setItem(CHAVE, JSON.stringify(a)); }catch(e){} }
 function recuperar(){ try{ const t=localStorage.getItem(CHAVE); return t?JSON.parse(t):null; }catch(e){ return null; } }
 function esquecer(){ try{ localStorage.removeItem(CHAVE); }catch(e){} }
@@ -945,10 +1436,13 @@ function balaoAtivo(chave, estado) {
     ? "sem sinal há " + duracao(s.minutos * 60000)
     : s.nivel === "fraco" ? "sinal fraco" : "sinal bom";
   return '<div class="balao">' +
-    '<div class="tit">' + escapar(nomeDe(chave)) + "</div>" +
+    '<div class="tit">' + escapar(rotuloDe(chave)) + "</div>" +
     "<div>" + escapar(textoStatus(estado)) + "</div>" +
     '<div class="cinza">' + ondas(s.barras) + " " + escapar(sinalTxt) + "</div>" +
     '<div class="cinza">' + escapar(lugarDe(estado.posicao)) + "</div>" +
+    // A hora da última leitura vem sempre junto, não só quando falta sinal:
+    // é ela que separa "mapa desatualizado" de "loco parada de verdade".
+    '<div class="cinza">última posição ' + escapar(relogioMs(estado.ultimoContatoMs)) + "</div>" +
     "</div>";
 }
 
@@ -1007,9 +1501,11 @@ function abrirPainel() {
 
   iniciarMapa();
   iniciarTimeline();
+  prepararModoParede();
   buscar();
   setInterval(buscar, INTERVALO_MS);
-  setInterval(pintarTudo, 30000); // o tempo passa mesmo sem ponto novo
+  setInterval(pintarTudo, 30000);        // o tempo passa mesmo sem ponto novo
+  setInterval(atualizarContato, 5000);   // e a idade do dado corre mais rápido
 }
 
 function iniciarMapa() {
@@ -1133,9 +1629,22 @@ async function buscar() {
   try {
     aparelhos = await carregarAparelhos();
     await atualizarHistorico();
+    ultimoContatoServidor = Date.now();
+    falhaAtual = null;
     faixa(null);
   } catch (e) {
-    faixa(e.message);
+    // Falhou: NÃO limpa o que está na tela. Dado velho rotulado como velho
+    // serve; tela vazia não serve para nada, e tela vazia num painel de
+    // parede parece pátio sem locomotiva. Quem avisa é o indicador de
+    // contato no cabeçalho, que continua contando a idade do dado.
+    //
+    // Também não desiste: o intervalo de 15 s segue chamando esta função,
+    // e é essa repetição que faz o painel voltar sozinho quando a rede
+    // volta — sem ninguém apertar nada (CONTEXTO-VTU 5.4).
+    falhaAtual = e.message;
+    faixa("Sem contato com o servidor (" + e.message +
+      "). A tela mostra a última informação recebida e volta sozinha quando a rede voltar.");
+    atualizarContato();
     return;
   }
   // As cercas mudam de vez em quando, não de 15 em 15 segundos: se o
@@ -1147,7 +1656,96 @@ async function buscar() {
   } catch (e) {
     cercas = [];
   }
+  vinculos = await carregarVinculos();
   pintarTudo();
+}
+
+/* ---------------- idade do dado (CONTEXTO-VTU 2 e 5.4) ----------------
+   Perda de sinal nunca pode ser silenciosa. Vale para o aparelho no pátio e
+   vale para o próprio painel: um monitor que parou de receber tem a mesma
+   cara de um pátio onde nada se move, e o programador não tem como saber a
+   diferença olhando. Então a idade do dado fica escrita o tempo todo.
+-------------------------------------------------------------------- */
+
+const CONTATO_VELHO_MS = 60 * 1000;
+const CONTATO_PERDIDO_MS = 3 * 60 * 1000;
+
+function atualizarContato() {
+  const caixa = el("contato");
+  const texto = el("contato-txt");
+  if (!caixa || !texto) return;
+
+  if (!ultimoContatoServidor) {
+    caixa.className = "contato";
+    texto.textContent = falhaAtual ? "sem contato" : "conectando…";
+    return;
+  }
+  const idade = Date.now() - ultimoContatoServidor;
+  caixa.className = "contato" +
+    (idade >= CONTATO_PERDIDO_MS ? " perdido" : idade >= CONTATO_VELHO_MS ? " velho" : "");
+  texto.textContent = idade < 20000
+    ? "ao vivo · " + relogioMs(ultimoContatoServidor)
+    : "sem atualizar há " + duracao(idade);
+}
+
+/* ---------------- modo painel de parede (CONTEXTO-VTU 5.4) ----------------
+   O que o gerente descreveu é uma tela sempre ligada ao lado do programador,
+   lida de alguns metros e de pé — não um site que alguém abre e fecha. Aqui
+   isso é: letra grande, sem os controles que ninguém opera a essa distância,
+   tela cheia sem barra de navegador, e a tela sem apagar sozinha.
+
+   A escolha fica guardada: quem liga o painel de manhã não deve ter de
+   reconfigurá-lo todo dia.
+------------------------------------------------------------------------ */
+
+const CHAVE_PAREDE = "rastreio.monitor.parede";
+let travaDeTela = null;
+
+async function segurarTela() {
+  // wakeLock não existe em todo navegador, e some sozinho quando a aba perde
+  // o foco. Falhar aqui não pode derrubar nada: no pior caso a tela apaga e
+  // alguém encosta no mouse.
+  try {
+    if (!("wakeLock" in navigator)) return;
+    travaDeTela = await navigator.wakeLock.request("screen");
+  } catch (e) {}
+}
+
+function aplicarParede(ligado) {
+  document.body.classList.toggle("parede", ligado);
+  el("b-parede").textContent = ligado ? "Sair do painel" : "Painel";
+  try { localStorage.setItem(CHAVE_PAREDE, ligado ? "1" : "0"); } catch (e) {}
+  // A grade mudou de tamanho; sem isto o Leaflet desenha o mapa no espaço
+  // antigo e sobra uma faixa cinza.
+  if (mapa) setTimeout(function () { mapa.invalidateSize(); }, 60);
+  if (ligado) segurarTela();
+}
+
+function prepararModoParede() {
+  let ligado = false;
+  try { ligado = localStorage.getItem(CHAVE_PAREDE) === "1"; } catch (e) {}
+  aplicarParede(ligado);
+
+  el("b-parede").onclick = function () {
+    const novo = !document.body.classList.contains("parede");
+    aplicarParede(novo);
+    // Tela cheia só pode ser pedida dentro de um clique — por isso mora aqui
+    // e não na hora de restaurar a preferência.
+    try {
+      if (novo) document.documentElement.requestFullscreen();
+      else if (document.fullscreenElement) document.exitFullscreen();
+    } catch (e) {}
+  };
+
+  // A trava de tela cai quando a aba vai para segundo plano e não volta
+  // sozinha. Sem isto, o painel apaga depois da primeira vez que alguém
+  // troca de janela.
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" &&
+        document.body.classList.contains("parede")) {
+      segurarTela();
+    }
+  });
 }
 
 /* ---------------- desenho ---------------- */
@@ -1160,6 +1758,7 @@ function pintarTudo() {
   desenharRota();
   desenharPainelLateral();
   atualizarRotuloTempo();
+  atualizarContato();
 }
 
 /**
@@ -1282,9 +1881,12 @@ function desenharPainelLateral() {
           '<div class="campo"><b class="st"></b></div>' +
           '<div class="campo lc"></div>' +
         "</div>";
-      d.querySelector(".n").textContent = a.dispositivo;
+      // O prefixo da loco, não o nome do celular (CONTEXTO-VTU 5.1). Sem
+      // vínculo cadastrado, cai no nome do aparelho — a tela diz o que sabe.
+      d.querySelector(".n").textContent = rotuloDe(chave);
       d.querySelector(".st").textContent = textoStatus(e);
-      d.querySelector(".lc").textContent = lugarDe(e.posicao);
+      d.querySelector(".lc").textContent = lugarDe(e.posicao) +
+        " · última posição " + relogioMs(e.ultimoContatoMs);
       d.onclick = () => { selecionado = chave; enquadrado = false; pintarTudo(); };
       c.appendChild(d);
     });
@@ -1297,6 +1899,16 @@ function desenharDetalhe(c) {
   const trechos = calcularTrechos(pontos);
   const lugares = resumoPorLugar(trechos, lugarDe);
   const s = e.sinal;
+
+  // A cobertura do MESMO período dos totais logo abaixo (CONTEXTO-VTU 5.2).
+  // Sem ela, "parado 3h40" é um número sem denominador: ninguém sabe se o
+  // rastreio esteve vivo essas 3h40 inteiras, e o primeiro questionamento
+  // derruba o número junto com a credibilidade do resto.
+  // Recebe o histórico inteiro, não a janela: a última notícia ANTES do
+  // começo do período é o que diz se ele começou coberto ou no escuro.
+  const fim = relogioAtual();
+  const cob = cobertura(historico.get(selecionado) || [],
+    fim - HORAS_ROTA * 3600 * 1000, fim);
 
   const voltar = document.createElement("div");
   voltar.className = "volta";
@@ -1313,20 +1925,45 @@ function desenharDetalhe(c) {
       '<div class="linha-campo"><span class="rot">Status</span><span class="val st"></span></div>' +
       '<div class="linha-campo"><span class="rot">Localidade</span><span class="val lc"></span></div>' +
       '<div class="linha-campo"><span class="rot">Sinal</span><span class="val sn"></span></div>' +
+      '<div class="linha-campo"><span class="rot">Última posição</span><span class="val up"></span></div>' +
+      '<div class="linha-campo"><span class="rot">Locomotiva</span><span class="val lo"></span></div>' +
     "</div>" +
+    '<div class="vinc-barra" style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"></div>' +
     '<div class="secao">Onde ficou nas últimas ' + HORAS_ROTA + " h</div>" +
+    '<div class="cob" style="font-size:12px;color:var(--suave);line-height:1.5;margin-bottom:6px"></div>' +
     '<div class="lugares"></div>' +
     '<div class="secao">Trechos</div>' +
     '<div class="trechos"></div>';
 
-  caixa.querySelector("h2").textContent = nomeDe(selecionado);
-  caixa.querySelector(".kicker").textContent = grupoDe(selecionado);
+  const aparelho = nomeDe(selecionado);
+  const grupo = grupoDe(selecionado);
+  const loco = prefixoEm(vinculos, grupo, aparelho, fim);
+
+  caixa.querySelector("h2").textContent = rotuloDe(selecionado);
+  caixa.querySelector(".kicker").textContent = grupo + " · aparelho " + aparelho;
   caixa.querySelector(".st").textContent = textoStatus(e);
   caixa.querySelector(".st").style.color = COR_FAROL[e.farol] || "";
   caixa.querySelector(".lc").textContent = lugarDe(e.posicao);
   caixa.querySelector(".sn").innerHTML = ondas(s.barras) + " " +
     escapar(s.mudo ? "sem sinal há " + duracao(s.minutos * 60000)
       : s.nivel === "fraco" ? "fraco" : "bom");
+  caixa.querySelector(".up").textContent = e.ultimoContatoMs
+    ? relogioMs(e.ultimoContatoMs) + " (" + duracao(fim - e.ultimoContatoMs) + ")"
+    : "—";
+  caixa.querySelector(".lo").textContent = loco || "sem vínculo";
+  if (!loco) caixa.querySelector(".lo").style.color = "var(--suave)";
+
+  montarBotoesDeVinculo(caixa.querySelector(".vinc-barra"), grupo, aparelho, loco);
+
+  const alvoCob = caixa.querySelector(".cob");
+  if (cob.percentual == null) {
+    alvoCob.textContent = "";
+  } else {
+    alvoCob.textContent = "Rastreio vivo em " + textoCobertura(cob) +
+      (cob.mudoMs > 0 ? " · " + duracao(cob.mudoMs) + " sem notícia" : "") +
+      ". Os tempos abaixo valem para o que foi observado.";
+    if (cob.percentual < 90) alvoCob.style.color = "var(--morno)";
+  }
 
   const alvoLugares = caixa.querySelector(".lugares");
   if (!lugares.length) {
@@ -1359,6 +1996,68 @@ function desenharDetalhe(c) {
   }
 
   c.appendChild(caixa);
+}
+
+/**
+ * Vincular e encerrar a locomotiva deste aparelho.
+ *
+ * Trocar de loco NÃO apaga o vínculo anterior: fecha o antigo no instante em
+ * que o novo começa. O percurso de ontem continua sendo da loco de ontem —
+ * é essa a razão de o vínculo ter vigência, e é o que separa um histórico
+ * que se pode citar de um que mente sobre o passado.
+ */
+function montarBotoesDeVinculo(barra, grupo, aparelho, loco) {
+  if (!podeEditarVinculos()) {
+    if (!loco) {
+      barra.innerHTML = '<span style="font-size:12px;color:var(--suave);line-height:1.5">' +
+        "Entre com a senha da família para dar o prefixo da locomotiva a este aparelho.</span>";
+    }
+    return;
+  }
+
+  const botao = (texto, aoClicar) => {
+    const b = document.createElement("button");
+    b.className = "fantasma";
+    b.textContent = texto;
+    b.onclick = aoClicar;
+    barra.appendChild(b);
+  };
+
+  const recarregar = async () => {
+    vinculos = await carregarVinculos();
+    pintarTudo();
+  };
+
+  botao(loco ? "Trocar de locomotiva" : "Vincular locomotiva", async () => {
+    const prefixo = (prompt(
+      "Prefixo da locomotiva que está com o aparelho \"" + aparelho + "\":",
+      loco || ""
+    ) || "").trim();
+    if (!prefixo) return;
+    try {
+      await criarVinculo(grupo, aparelho, prefixo);
+      faixa(null);
+      await recarregar();
+    } catch (e) {
+      faixa(e.message);
+    }
+  });
+
+  if (!loco) return;
+
+  botao("Encerrar vínculo", async () => {
+    const aberto = vinculoEm(vinculos, grupo, aparelho, Date.now());
+    if (!aberto || aberto.ate != null) { faixa("Não há vínculo aberto para encerrar."); return; }
+    if (!confirm("Encerrar o vínculo do aparelho \"" + aparelho + "\" com a locomotiva " +
+      loco + "?\n\nO histórico até agora continua sendo dela.")) return;
+    try {
+      await fecharVinculo(aberto.id);
+      faixa(null);
+      await recarregar();
+    } catch (e) {
+      faixa(e.message);
+    }
+  });
 }
 
 /* ---------------- timeline (item 6) ----------------
