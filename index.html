@@ -12,7 +12,7 @@
 :root{
   --tinta:#16202B; --suave:#5A6B7C; --linha:#D4DCE4;
   --papel:#EDF1F5; --cartao:#FFF; --parado:#98A6B4;
-  --vivo:#2E7D74; --morno:#C08A2E; --frio:#B5563F;
+  --vivo:#2E7D74; --morno:#C08A2E; --frio:#B5563F; --andando:#2F6DB5;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
@@ -46,52 +46,81 @@ button.fantasma{background:transparent;color:var(--tinta);border-color:var(--lin
 .erro{color:var(--frio);font-size:13px;line-height:1.45;margin-top:12px}
 .rodape{font-size:13px;line-height:1.5;color:var(--suave);margin-top:16px}
 
-#painel{display:none;height:100%;grid-template-columns:300px 1fr;grid-template-rows:auto 1fr}
+#painel{display:none;height:100%;grid-template-columns:320px 1fr;grid-template-rows:auto 1fr auto}
 #painel.ver{display:grid}
 header{grid-column:1/-1;background:var(--cartao);border-bottom:1px solid var(--linha);
   padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 header h1{font-size:20px}
 .cabeca-dir{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.pulso{width:11px;height:11px;border-radius:50%;background:var(--parado);flex:none}
-.pulso.on{background:var(--vivo);animation:bater 2s infinite}
-@keyframes bater{0%,100%{opacity:1}50%{opacity:.35}}
 
 aside{background:var(--cartao);border-right:1px solid var(--linha);overflow-y:auto;padding:14px}
 .secao{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--suave);margin:14px 0 8px}
+  text-transform:uppercase;color:var(--suave);margin:16px 0 8px}
 .secao:first-child{margin-top:2px}
-.item{display:flex;gap:10px;align-items:center;padding:10px;border-radius:9px;
+
+/* ---- lista de ativos: os campos do item 8 ficam em linhas separadas ---- */
+.item{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:9px;
   cursor:pointer;border:1px solid transparent}
 .item:hover{background:var(--papel)}
 .item.on{background:var(--papel);border-color:var(--linha)}
-.item .nome{font-size:15px;font-weight:500}
-.item.on .nome{font-weight:700}
-.item .sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--suave);margin-top:2px}
-.bola{width:11px;height:11px;border-radius:50%;flex:none}
+.item .corpo{min-width:0;flex:1}
+.item .nome{font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px}
+.item .campo{font-size:13px;color:var(--suave);margin-top:3px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .campo b{font-weight:600;color:var(--tinta)}
+.bola{width:11px;height:11px;border-radius:50%;flex:none;margin-top:5px}
+.mudo{opacity:.45}
+.ondas{flex:none;vertical-align:-1px}
 
-main{position:relative;min-height:0;display:flex;flex-direction:column}
-#mapa{flex:1;min-height:0;background:#DFE6ED}
-.tira{background:var(--cartao);border-top:1px solid var(--linha);
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
-.celula{padding:11px 16px;border-right:1px solid var(--linha)}
-.celula:last-child{border-right:none}
-.rotulo{font-family:'JetBrains Mono',monospace;font-size:10px;
-  letter-spacing:.12em;text-transform:uppercase;color:var(--suave)}
-.valor{font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:600;margin-top:4px}
-.grupo-btn{display:flex;gap:6px}
-.grupo-btn button{width:auto;font-size:13px;padding:7px 12px;background:transparent;
-  color:var(--tinta);border-color:var(--linha);font-weight:500}
-.grupo-btn button.on{background:var(--tinta);color:#fff;border-color:var(--tinta)}
+/* ---- detalhe do ativo (a lista vira isto ao clicar num pin) ---- */
+.volta{font-size:13px;color:var(--suave);cursor:pointer;display:inline-block;margin-bottom:10px}
+.volta:hover{color:var(--tinta)}
+.detalhe h2{font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:800}
+.linha-campo{display:flex;justify-content:space-between;gap:12px;padding:8px 0;
+  border-bottom:1px solid var(--linha);font-size:14px}
+.linha-campo .rot{color:var(--suave)}
+.linha-campo .val{text-align:right;font-weight:600}
+.lugar{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0}
+.lugar .nom{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lugar .dur{font-family:'JetBrains Mono',monospace;color:var(--suave);flex:none}
+
+main{position:relative;min-height:0}
+#mapa{height:100%;background:#DFE6ED}
+
+/* ---- timeline (item 6) ---- */
+.tempo{grid-column:1/-1;background:var(--cartao);border-top:1px solid var(--linha);
+  padding:10px 18px 12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.tempo .quando{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;
+  min-width:190px;flex:none}
+.tempo input[type=range]{flex:1;min-width:200px;margin:0;accent-color:var(--tinta)}
+.tempo .agora-btn{width:auto;font-size:13px;padding:7px 12px;background:transparent;
+  color:var(--tinta);border-color:var(--linha);font-weight:500;flex:none}
+.tempo.passado .quando{color:var(--morno)}
+
 .faixa{grid-column:1/-1;padding:12px 18px;background:#FBF0E4;
   border-top:1px solid var(--linha);font-size:13px;line-height:1.5;display:none}
 .faixa.ver{display:block}
-.atual{width:18px;height:18px;border-radius:50%;background:#2E7D74;
-  border:3px solid #fff;box-shadow:0 0 0 2px #2E7D74,0 2px 8px rgba(0,0,0,.3)}
+
+/* ---- pin e balões ---- */
+.pin{filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));cursor:pointer}
+.pin.apagado{opacity:.45}
+.leaflet-tooltip.balao{font-family:'Inter Tight',sans-serif;font-size:13px;line-height:1.5;
+  padding:8px 10px;border-radius:9px;border:1px solid var(--linha);color:var(--tinta)}
+.balao .tit{font-weight:700;margin-bottom:2px}
+.balao .cinza{color:var(--suave)}
+.marco{font-family:'JetBrains Mono',monospace;font-size:12px}
+.cercas-barra{display:none;gap:6px}
+.cercas-barra button{width:auto;font-size:13px;padding:7px 12px;background:transparent;
+  color:var(--tinta);border-color:var(--linha);font-weight:500}
+.cercas-barra button:disabled{opacity:.4;cursor:default}
+.dica{font-size:12px;color:var(--suave);max-width:280px}
 
 @media (max-width:760px){
-  #painel.ver{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}
-  aside{border-right:none;border-top:1px solid var(--linha);max-height:220px;order:3}
+  #painel.ver{grid-template-columns:1fr;grid-template-rows:auto 1fr auto auto}
+  aside{border-right:none;border-top:1px solid var(--linha);max-height:40vh;order:4}
   main{order:2}
+  .tempo{order:3}
+  .tempo .quando{min-width:0;font-size:13px}
 }
 </style>
 </head>
@@ -130,35 +159,554 @@ main{position:relative;min-height:0;display:flex;flex-direction:column}
 
 <div id="painel">
   <header>
-    <span class="pulso" id="pulso"></span>
     <div>
       <div class="kicker" id="cab-escopo">—</div>
       <h1 id="cab-titulo">Aguardando dados</h1>
     </div>
     <div class="cabeca-dir">
-      <div class="grupo-btn" id="janelas"></div>
-      <button class="fantasma" id="b-centrar">Centralizar</button>
+      <span class="dica" id="dica-cerca"></span>
+      <div class="cercas-barra" id="cercas-barra">
+        <button class="fantasma" id="b-nova-cerca">Nova cerca</button>
+        <button class="fantasma" id="b-desfazer">Desfazer ponto</button>
+        <button class="fantasma" id="b-cancelar">Cancelar</button>
+        <button class="fantasma" id="b-salvar">Salvar cerca</button>
+      </div>
+      <button class="fantasma" id="b-centrar">Ver todos</button>
       <button class="fantasma" id="b-sair">Sair</button>
     </div>
   </header>
 
   <aside><div id="lista"></div></aside>
 
-  <main>
-    <div id="mapa"></div>
-    <div class="tira">
-      <div class="celula"><div class="rotulo">Última leitura</div><div class="valor" id="v-hora">—</div></div>
-      <div class="celula"><div class="rotulo">Atraso</div><div class="valor" id="v-atraso">—</div></div>
-      <div class="celula"><div class="rotulo">Velocidade</div><div class="valor" id="v-vel">—</div></div>
-      <div class="celula"><div class="rotulo">Precisão</div><div class="valor" id="v-prec">—</div></div>
-      <div class="celula"><div class="rotulo">Pontos no período</div><div class="valor" id="v-qtd">—</div></div>
-    </div>
-  </main>
+  <main><div id="mapa"></div></main>
+
+  <div class="tempo" id="tempo">
+    <span class="quando" id="t-quando">—</span>
+    <input type="range" id="t-barra" min="0" max="10080" step="1" value="10080" />
+    <button class="agora-btn" id="b-agora">Agora</button>
+  </div>
 
   <div class="faixa" id="faixa"></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+/* NUCLEO:INICIO — gerado por rastreio/ferramentas/embutir.js
+   Não edite aqui: mexa em src/trilha.js, src/paradas.js, src/cercas.js, no repositório do app,
+   e rode o script de novo. O que for escrito à mão neste trecho
+   se perde na próxima geração. */
+
+/* ---------- src/trilha.js ---------- */
+
+/**
+ * Preparo do traçado para desenho. Três correções, nesta ordem:
+ *
+ *  1. Ordena por "hora" (o relógio da leitura do GPS) e não pela chegada no
+ *     banco. Os pontos sobem em lote e dividem o mesmo carimbo de criação —
+ *     ordenar por ele embaralha o trecho inteiro e a linha sai em zigue-zague.
+ *  2. Tira do desenho as leituras com precisão acima de 50 m. Elas continuam
+ *     gravadas: o corte é só visual.
+ *  3. Ignora excursão que sai e volta: se o aparelho se afasta e reaparece a
+ *     menos de 20 m da âncora em poucos minutos, aquilo foi deriva do GPS e
+ *     não vira traço.
+ */
+
+const PRECISAO_MAX = 50;               // m
+const RAIO_PARADA = 20;                // m
+const EXCURSAO_MAX_MS = 5 * 60 * 1000; // os "poucos minutos"
+const PASSO_MARCA = 500;               // m entre os marcos da rota
+
+const RAIO_TERRA = 6371000;
+
+/** Distância em metros entre duas leituras (haversine). */
+function distancia(a, b) {
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLng = (b.lng - a.lng) * rad;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * RAIO_TERRA * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+/** Instante da leitura. Só cai no criado_em se "hora" vier vazia. */
+function emMs(p) {
+  const t = Date.parse(p?.hora ?? "");
+  if (!Number.isNaN(t)) return t;
+  const c = Date.parse(p?.criado_em ?? "");
+  return Number.isNaN(c) ? 0 : c;
+}
+
+const valido = (p) =>
+  p != null && Number.isFinite(p.lat) && Number.isFinite(p.lng);
+
+/**
+ * Ordena pela hora real da leitura. O sort do JS é estável, então leituras
+ * com a mesma hora ficam na ordem em que o servidor mandou.
+ */
+function ordenarPorHora(pontos) {
+  return (pontos || []).filter(valido).slice().sort((a, b) => emMs(a) - emMs(b));
+}
+
+/**
+ * Leituras em condição de dizer alguma coisa sobre geometria: na ordem certa
+ * e sem as imprecisas. Serve tanto ao desenho quanto ao cálculo de paradas —
+ * leitura torta inventa movimento que não houve.
+ */
+function leiturasBoas(pontos, precisaoMax = PRECISAO_MAX) {
+  return ordenarPorHora(pontos).filter(
+    (p) => p.precisao == null || p.precisao <= precisaoMax
+  );
+}
+
+/**
+ * Junta num nó só as leituras consecutivas que ficam dentro do raio de parada.
+ * Parado, o GPS não para de mandar ponto — sem isso a linha vira um novelo em
+ * cima da casa.
+ */
+function agrupar(pontos, raioParada) {
+  const grupos = [];
+  for (const p of pontos) {
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && distancia(ultimo.ancora, p) <= raioParada) {
+      ultimo.fim = emMs(p);
+    } else {
+      grupos.push({ ancora: p, inicio: emMs(p), fim: emMs(p) });
+    }
+  }
+  return grupos;
+}
+
+/**
+ * Apaga o desvio que volta pra âncora. Se depois de sair o aparelho reaparece
+ * a menos de raioParada dela ainda dentro da janela, tudo que houve no meio
+ * some e a parada segue contando como uma coisa só.
+ */
+function removerExcursoes(grupos, raioParada, janelaMs) {
+  const saida = [];
+  let i = 0;
+  while (i < grupos.length) {
+    const base = { ...grupos[i] };
+    let j = i + 1;
+    for (;;) {
+      let retorno = -1;
+      for (let k = j; k < grupos.length; k++) {
+        if (grupos[k].inicio - base.fim > janelaMs) break;
+        if (distancia(base.ancora, grupos[k].ancora) <= raioParada) retorno = k;
+      }
+      if (retorno < 0) break;
+      base.fim = grupos[retorno].fim; // a parada continua; o desvio some
+      j = retorno + 1;
+    }
+    saida.push(base);
+    i = j;
+  }
+  return saida;
+}
+
+/**
+ * Devolve o que o mapa precisa:
+ *   trilha — vértices da linha, ordenados, filtrados e sem os desvios
+ *   atual  — leitura boa mais recente, que é onde o pin fica
+ *
+ * A trilha termina na âncora da última parada, não em "atual": entre os dois
+ * pode haver até um raio de distância, e é justamente esse resto que faz o
+ * traço tremer quando o aparelho está parado.
+ */
+/**
+ * Pontinhos a cada 500 m percorridos ao longo da rota (item 5). Devolve a
+ * posição interpolada entre dois vértices, a hora e a distância acumulada —
+ * o que aparece ao passar o mouse no site ou tocar no app.
+ *
+ * Interpola porque o marco quase nunca cai em cima de um vértice: com um
+ * ponto a cada 50 m, o de 500 m fica no meio de um trecho.
+ */
+function marcosDeDistancia(trilha, passo = PASSO_MARCA) {
+  const marcos = [];
+  let acumulado = 0;
+  let proximo = passo;
+
+  for (let i = 1; i < trilha.length; i++) {
+    const d = distancia(trilha[i - 1], trilha[i]);
+    while (d > 0 && acumulado + d >= proximo) {
+      const fracao = (proximo - acumulado) / d;
+      marcos.push({
+        lat: trilha[i - 1].lat + (trilha[i].lat - trilha[i - 1].lat) * fracao,
+        lng: trilha[i - 1].lng + (trilha[i].lng - trilha[i - 1].lng) * fracao,
+        hora: trilha[i].hora,
+        metros: proximo,
+      });
+      proximo += passo;
+    }
+    acumulado += d;
+  }
+  return marcos;
+}
+
+function prepararTrilha(pontos, opcoes = {}) {
+  const {
+    precisaoMax = PRECISAO_MAX,
+    raioParada = RAIO_PARADA,
+    janelaExcursaoMs = EXCURSAO_MAX_MS,
+  } = opcoes;
+
+  const ordenados = ordenarPorHora(pontos);
+  const bons = leiturasBoas(ordenados, precisaoMax);
+
+  // Se nenhuma leitura passou no corte, o pin não pode sumir: fica na última
+  // posição conhecida, mesmo que imprecisa. Só a linha some.
+  if (!bons.length) {
+    return { trilha: [], atual: ordenados[ordenados.length - 1] || null };
+  }
+
+  const limpos = removerExcursoes(
+    agrupar(bons, raioParada),
+    raioParada,
+    janelaExcursaoMs
+  );
+
+  return {
+    trilha: limpos.map((g) => g.ancora),
+    atual: bons[bons.length - 1],
+  };
+}
+
+/* ---------- src/paradas.js ---------- */
+
+/**
+ * Estado do ativo a partir dos pontos: parado ou em movimento, há quanto
+ * tempo, com que sinal. É o que alimenta o farol, o ícone de ondas e os
+ * campos da lista (CLAUDE.md itens 3, 4 e 8).
+ *
+ * Nada aqui sabe desenhar. O monitor do app e o site consomem as mesmas
+ * funções e só escolhem como mostrar.
+ *
+ * Farol (item 4) — tempo parado no mesmo lugar, limites iguais para todo
+ * lugar: verde até 15 min, amarelo de 15 a 25, vermelho acima de 25, azul
+ * em movimento.
+ *
+ * Sinal (item 3) — tempo desde a última notícia: cheio até 12 min, uma barra
+ * de 12 a 15, onda cortada acima de 15. Sem sinal o pin não some; fica
+ * esmaecido na última posição conhecida.
+ */
+
+
+const MOVIMENTO_SUSTENTADO_MS = 60 * 1000; // item 4: 60 s fora do raio
+const FAROL_AMARELO_MIN = 15;
+const FAROL_VERMELHO_MIN = 25;
+const SINAL_FRACO_MIN = 12;
+const SINAL_MUDO_MIN = 15;
+
+/**
+ * Quebra o histórico em trechos de parada e de movimento.
+ *
+ * A máquina tem dois estados. Parado, guarda a âncora: leitura que cai dentro
+ * do raio só estica a parada. Leitura fora abre uma suspeita de saída, e a
+ * saída só vira movimento se durar mais de 60 s — assim a deriva que sai e
+ * volta não parte a parada em duas. Em movimento, o aparelho assenta quando
+ * duas leituras seguidas caem dentro do raio uma da outra; a parada nova é
+ * ancorada na primeira delas, que é quando ele chegou.
+ *
+ * Devolve trechos { tipo, inicio, fim, ancora? } em ordem cronológica.
+ *
+ * "agora" existe por causa da saída que ainda não foi confirmada por uma
+ * segunda leitura: se o aparelho apareceu fora do raio e o tempo passou sem
+ * ele voltar, a saída se confirma pelo relógio, não por um ponto novo. Sem
+ * isso, quem sai e perde o sinal na esquina continua "parado em casa".
+ */
+function calcularTrechos(pontos, opcoes = {}) {
+  const {
+    raio = RAIO_PARADA,
+    movimentoSustentadoMs = MOVIMENTO_SUSTENTADO_MS,
+    precisaoMax,
+    agora,
+  } = opcoes;
+
+  const ps = leiturasBoas(pontos, precisaoMax);
+  if (!ps.length) return [];
+  const relogio = agora ?? emMs(ps[ps.length - 1]);
+
+  const trechos = [];
+  let parada = { ancora: ps[0], inicio: emMs(ps[0]), fim: emMs(ps[0]) };
+  let movimento = null;   // { inicio, anterior }
+  let suspeita = null;    // primeira leitura fora do raio, ainda não confirmada
+
+  for (let i = 1; i < ps.length; i++) {
+    const p = ps[i];
+    const t = emMs(p);
+
+    if (parada) {
+      if (distancia(parada.ancora, p) <= raio) {
+        parada.fim = t;      // continua parado
+        suspeita = null;     // se havia saída em curso, foi excursão: esquece
+        continue;
+      }
+      if (!suspeita) suspeita = { desde: t };
+      if (t - suspeita.desde <= movimentoSustentadoMs) continue;
+
+      // fora do raio por mais de 60 s: saiu mesmo
+      trechos.push({ ...parada, tipo: "parada" });
+      movimento = { inicio: parada.fim, anterior: p };
+      parada = null;
+      suspeita = null;
+      continue;
+    }
+
+    // em movimento: assentou?
+    if (distancia(movimento.anterior, p) <= raio) {
+      const chegada = emMs(movimento.anterior);
+      trechos.push({ tipo: "movimento", inicio: movimento.inicio, fim: chegada });
+      parada = { ancora: movimento.anterior, inicio: chegada, fim: t };
+      movimento = null;
+    } else {
+      movimento.anterior = p;
+    }
+  }
+
+  if (!parada) {
+    trechos.push({ tipo: "movimento", inicio: movimento.inicio, fim: emMs(movimento.anterior) });
+    return trechos;
+  }
+
+  trechos.push({ ...parada, tipo: "parada" });
+  // Saiu do raio e o tempo passou sem voltar: a saída se confirma sozinha.
+  if (suspeita && relogio - suspeita.desde > movimentoSustentadoMs) {
+    trechos.push({
+      tipo: "movimento",
+      inicio: parada.fim,
+      fim: emMs(ps[ps.length - 1]),
+    });
+  }
+  return trechos;
+}
+
+function farolDe(paradoMin, emMovimento) {
+  if (emMovimento) return "azul";
+  if (paradoMin < FAROL_AMARELO_MIN) return "verde";
+  if (paradoMin <= FAROL_VERMELHO_MIN) return "amarelo";
+  return "vermelho";
+}
+
+/**
+ * Sinal pelo tempo desde a última notícia. "barras" existe para o ícone de
+ * ondas: 3 é a onda cheia, 1 é a onda com um traço, 0 é a onda cortada.
+ */
+function calcularSinal(ultimaMs, agora = Date.now()) {
+  if (!ultimaMs) return { nivel: "sem", barras: 0, minutos: null, mudo: true };
+  const minutos = (agora - ultimaMs) / 60000;
+  if (minutos < SINAL_FRACO_MIN) return { nivel: "cheio", barras: 3, minutos, mudo: false };
+  if (minutos <= SINAL_MUDO_MIN) return { nivel: "fraco", barras: 1, minutos, mudo: false };
+  return { nivel: "sem", barras: 0, minutos, mudo: true };
+}
+
+/**
+ * O retrato de um ativo num instante. Passando "agora" no passado, devolve o
+ * que valia naquele momento — é o que a timeline (item 6) vai pedir, com
+ * todos os pins voltando juntos.
+ */
+function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
+  const ps = leiturasBoas(pontos, opcoes.precisaoMax).filter((p) => emMs(p) <= agora);
+  const todas = (pontos || []).filter((p) => emMs(p) <= agora);
+  const ultimaConhecida = todas.length ? todas[todas.length - 1] : null;
+
+  if (!ps.length) {
+    // Sem leitura boa o pin ainda tem de aparecer, na última posição conhecida.
+    return {
+      posicao: ultimaConhecida,
+      emMovimento: false,
+      desde: null,
+      paradoMs: null,
+      farol: "verde",
+      sinal: calcularSinal(ultimaConhecida ? emMs(ultimaConhecida) : null, agora),
+      trechos: [],
+    };
+  }
+
+  const trechos = calcularTrechos(ps, { ...opcoes, agora });
+  const ultimo = trechos[trechos.length - 1];
+  const emMovimento = ultimo.tipo === "movimento";
+  const paradoMs = emMovimento ? null : agora - ultimo.inicio;
+
+  return {
+    // Parado, o pin fica na âncora: é o lugar, não a última tremida do GPS.
+    posicao: emMovimento ? ps[ps.length - 1] : ultimo.ancora,
+    emMovimento,
+    desde: ultimo.inicio,
+    paradoMs,
+    farol: farolDe(paradoMs / 60000, emMovimento),
+    sinal: calcularSinal(emMs(ps[ps.length - 1]), agora),
+    trechos,
+  };
+}
+
+/** "2h07", "14min", "45s" — o formato que aparece no status e nos balões. */
+function duracao(ms) {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return "—";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + "min";
+  return Math.floor(m / 60) + "h" + String(m % 60).padStart(2, "0");
+}
+
+/**
+ * Texto do campo Status (item 8). Sem a palavra "atraso": a urgência é
+ * comunicada pela cor do farol, não pela frase.
+ */
+function textoStatus(estado) {
+  if (!estado || !estado.posicao) return "Sem dados";
+  if (estado.emMovimento) return "Em movimento";
+  return "Parado há " + duracao(estado.paradoMs);
+}
+
+/** Coordenada como nome de lugar, quando não há cerca que o batize. */
+const coordenada = (p) =>
+  p ? `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}` : "—";
+
+/**
+ * Somatório por lugar no período (item 8). "nomear" recebe a âncora e devolve
+ * o nome do lugar — é por aí que as cercas (item 7) entram depois, sem que
+ * este arquivo precise saber que elas existem.
+ */
+function resumoPorLugar(trechos, nomear = coordenada) {
+  const lugares = new Map();
+  for (const t of trechos) {
+    if (t.tipo !== "parada") continue;
+    const nome = nomear(t.ancora);
+    const atual = lugares.get(nome) || { lugar: nome, total: 0, visitas: 0, ancora: t.ancora };
+    atual.total += t.fim - t.inicio;
+    atual.visitas += 1;
+    lugares.set(nome, atual);
+  }
+  return [...lugares.values()].sort((a, b) => b.total - a.total);
+}
+
+/* ---------- src/cercas.js ---------- */
+
+/**
+ * Cercas (CLAUDE.md item 7). Um polígono livre, desenhado ponto a ponto,
+ * serve para uma coisa só: dar nome ao lugar. "Parado na Casa há 2h07" em
+ * vez de "parado em -20.31550, -40.31280".
+ *
+ * O que a cerca NÃO faz:
+ *  - não mexe no farol, que continua contando os 20 m da âncora;
+ *  - não filtra nada do traçado;
+ *  - não muda o que é gravado no celular.
+ *
+ * Ela entra só na hora de escrever o nome do lugar, e por isso este arquivo
+ * não conhece mapa, tela nem banco: recebe o ponto e a lista de cercas, e
+ * devolve texto.
+ *
+ * A cerca pertence à família e vale para todos os grupos dela — quem carrega
+ * a lista é quem sabe disso; aqui elas chegam prontas.
+ */
+
+
+/**
+ * Ponto dentro do polígono, pelo método do raio: conta quantas arestas uma
+ * linha para o lado cruza. Ímpar é dentro, par é fora. Funciona com polígono
+ * de qualquer formato, inclusive côncavo — que é o caso de um pátio ou de um
+ * quarteirão desenhado à mão.
+ *
+ * Em distâncias de bairro a curvatura da Terra não muda o resultado, então
+ * lat/lng entram como se fossem x e y.
+ */
+function dentroDaCerca(p, cerca) {
+  const v = cerca && cerca.pontos;
+  if (!p || !Array.isArray(v) || v.length < 3) return false;
+
+  let dentro = false;
+  for (let i = 0, j = v.length - 1; i < v.length; j = i++) {
+    const latI = v[i].lat, lngI = v[i].lng;
+    const latJ = v[j].lat, lngJ = v[j].lng;
+    const cruza =
+      latI > p.lat !== latJ > p.lat &&
+      p.lng < ((lngJ - lngI) * (p.lat - latI)) / (latJ - latI) + lngI;
+    if (cruza) dentro = !dentro;
+  }
+  return dentro;
+}
+
+/** Quantos metros vale um grau de latitude. Longitude encolhe com o cosseno. */
+const GRAU_EM_METROS = 111320;
+
+/**
+ * Área do polígono, pela fórmula do laço de sapato. Serve só para comparar
+ * cercas entre si, então a aproximação basta: corrigir a longitude pelo
+ * cosseno da latitude média já dá conta, e no tamanho de um pátio ou de um
+ * quarteirão o erro não chega perto de trocar a ordem de duas cercas.
+ *
+ * Polígono inválido devolve Infinity, para nunca ganhar de um válido.
+ */
+function area(cerca) {
+  const v = cerca && cerca.pontos;
+  if (!Array.isArray(v) || v.length < 3) return Infinity;
+
+  const latMedia = v.reduce((s, p) => s + p.lat, 0) / v.length;
+  const escala = Math.cos((latMedia * Math.PI) / 180);
+
+  let soma = 0;
+  for (let i = 0, j = v.length - 1; i < v.length; j = i++) {
+    soma += v[j].lng * escala * v[i].lat - v[i].lng * escala * v[j].lat;
+  }
+  return Math.abs(soma / 2) * GRAU_EM_METROS * GRAU_EM_METROS;
+}
+
+/**
+ * A cerca que contém o ponto, ou null.
+ *
+ * Havendo mais de uma — um pátio com a oficina desenhada dentro dele —, vale
+ * a MENOR. É ela que descreve melhor onde o aparelho está: "na Oficina" diz
+ * mais que "no Pátio". Ordem da lista não influencia.
+ */
+function cercaDe(p, cercas) {
+  if (!p || !cercas || !cercas.length) return null;
+
+  let escolhida = null;
+  let menor = Infinity;
+  for (const c of cercas) {
+    if (!dentroDaCerca(p, c)) continue;
+    const a = area(c);
+    if (a < menor) {
+      menor = a;
+      escolhida = c;
+    }
+  }
+  return escolhida;
+}
+
+/**
+ * O nome do lugar: a cerca, se o ponto estiver dentro de alguma; a coordenada,
+ * se não estiver. É a única função que a lista, os balões e o histórico
+ * precisam chamar.
+ */
+function nomearLugar(p, cercas) {
+  const c = cercaDe(p, cercas);
+  return c ? c.nome : coordenada(p);
+}
+
+/**
+ * Fecha o polígono para desenho: repete o primeiro ponto no fim. O Leaflet
+ * fecha sozinho, mas quem escreve o traço enquanto a pessoa clica precisa
+ * disso explícito.
+ */
+const fechar = (pontos) =>
+  pontos.length > 2 ? pontos.concat([pontos[0]]) : pontos;
+
+/**
+ * Uma cerca só vale com três vértices. Com dois, é uma linha e não tem
+ * dentro; o servidor recusa, mas a tela avisa antes de tentar.
+ */
+function validar(nome, pontos) {
+  if (!nome || !nome.trim()) return "Dê um nome à cerca.";
+  if (!pontos || pontos.length < 3) return "A cerca precisa de pelo menos três pontos.";
+  return null;
+}
+
+/* NUCLEO:FIM */
+</script>
+
 <script>
 /* ==================================================================
    CONFIGURAÇÃO — as mesmas duas linhas que estão no src/api.js do app.
@@ -171,16 +719,35 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const INTERVALO_MS = 15000;
 const CHAVE = "rastreio.monitor.acesso";
-const JANELAS = [1, 6, 24];
+
+const DIAS_TIMELINE = 7;
+const HORAS_HISTORICO = 24 * DIAS_TIMELINE; // o quanto a timeline alcança
+const HORAS_ROTA = 24;                      // a rota que aparece ao clicar
+const HORAS_ATUALIZACAO = 1;                // só o pedaço novo, a cada 15 s
+// PASSO_MARCA (os 500 m entre os pontinhos) vem do núcleo, junto com a conta.
+
+const COR_FAROL = {
+  verde: getComputedStyle(document.documentElement).getPropertyValue("--vivo").trim() || "#2E7D74",
+  amarelo: "#C08A2E", vermelho: "#B5563F", azul: "#2F6DB5",
+};
 
 let acesso = null;        // { tipo:'grupo'|'familia', nome, senha }
 let nivel = "grupo";
-let janela = 6;
-let alvo = null;          // { grupo, dispositivo }
-let aparelhos = [];
-let mapa, trilha, marca, halo, primeira = true, seguir = true;
+let aparelhos = [];       // o que o servidor diz que existe
+let historico = new Map();// chave -> pontos crus dos últimos 7 dias
+let selecionado = null;   // chave do ativo aberto, ou null
+let instante = null;      // null = agora; número = momento da timeline
+let cercas = [];          // os lugares com nome (item 7)
+let desenhando = null;    // vértices da cerca em construção, ou null
+let mapa, pins = new Map(), camadaRota = null, camadaCercas = null, enquadrado = false;
 
 const el = (id) => document.getElementById(id);
+const chaveDe = (a) => a.grupo + "\u0000" + a.dispositivo;
+const nomeDe = (chave) => chave.split("\u0000")[1];
+const grupoDe = (chave) => chave.split("\u0000")[0];
+
+/** O relógio do monitor: o agora de verdade, ou o instante da timeline. */
+const relogioAtual = () => instante ?? Date.now();
 
 async function rpc(funcao, parametros) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -219,35 +786,96 @@ async function carregarAparelhos() {
   return lista.map(function (d) { d.grupo = acesso.nome; return d; });
 }
 
-function carregarPontos(grupo, dispositivo) {
+function carregarPontos(grupo, dispositivo, horas) {
   if (acesso.tipo === "familia") {
     return rpc("listar_pontos_familia", {
       p_nome: acesso.nome, p_senha: acesso.senha,
-      p_grupo: grupo, p_dispositivo: dispositivo, p_horas: janela
+      p_grupo: grupo, p_dispositivo: dispositivo, p_horas: horas
     });
   }
   return rpc("listar_pontos", {
     p_nome: acesso.nome, p_senha: acesso.senha,
-    p_dispositivo: dispositivo, p_horas: janela
+    p_dispositivo: dispositivo, p_horas: horas
   });
 }
 
-/* ---------------- utilidades ---------------- */
+/* ---------------- cercas (item 7) ----------------
+   Quem entra com senha de família cria e apaga; quem entra com senha de
+   grupo só enxerga. A cerca é da família e vale para todos os grupos dela,
+   então o grupo pede a lista e o servidor resolve de qual família ele é.
+------------------------------------------------- */
 
-function haQuanto(iso) {
-  if (!iso) return "—";
-  const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return s + "s";
-  if (s < 3600) return Math.round(s / 60) + "min";
-  return Math.floor(s / 3600) + "h" + String(Math.round((s % 3600) / 60)).padStart(2, "0");
+const podeEditarCercas = () => acesso && acesso.tipo === "familia";
+
+async function carregarCercas() {
+  const lista = acesso.tipo === "familia"
+    ? await rpc("listar_cercas_familia", { p_nome: acesso.nome, p_senha: acesso.senha })
+    : await rpc("listar_cercas", { p_nome: acesso.nome, p_senha: acesso.senha });
+  return lista || [];
 }
-function corPor(iso) {
-  if (!iso) return "var(--parado)";
-  const min = (Date.now() - new Date(iso).getTime()) / 60000;
-  return min < 3 ? "var(--vivo)" : min < 30 ? "var(--morno)" : "var(--frio)";
+
+const salvarCerca = (nome, pontos) =>
+  rpc("criar_cerca", {
+    p_nome: acesso.nome, p_senha: acesso.senha,
+    p_cerca: nome, p_pontos: pontos,
+  });
+
+const removerCerca = (id) =>
+  rpc("apagar_cerca", { p_nome: acesso.nome, p_senha: acesso.senha, p_id: id });
+
+/* ---------------- histórico guardado no navegador ----------------
+   O servidor só sabe devolver "as últimas N horas". Baixar os 7 dias de
+   todos os aparelhos a cada 15 segundos seria absurdo, então cada ativo
+   baixa a semana uma vez, quando aparece, e depois só a última hora — que
+   é remendada no que já está aqui. É isso que sustenta a timeline sem
+   pesar na rede.
+------------------------------------------------------------------ */
+
+const marcaDo = (p) => p.hora + "|" + p.lat + "|" + p.lng;
+
+function mesclar(chave, novos) {
+  const antigos = historico.get(chave) || [];
+  const vistos = new Set(antigos.map(marcaDo));
+  const juntos = antigos.concat((novos || []).filter((p) => !vistos.has(marcaDo(p))));
+  const corte = Date.now() - HORAS_HISTORICO * 3600 * 1000;
+  historico.set(chave, juntos.filter((p) => emMs(p) >= corte).sort((a, b) => emMs(a) - emMs(b)));
 }
+
+async function atualizarHistorico() {
+  const tarefas = aparelhos.map(async (a) => {
+    const chave = chaveDe(a);
+    const novato = !historico.has(chave);
+    const pontos = await carregarPontos(a.grupo, a.dispositivo,
+      novato ? HORAS_HISTORICO : HORAS_ATUALIZACAO);
+    mesclar(chave, pontos);
+  });
+  await Promise.all(tarefas);
+}
+
+/** Os pontos de um ativo dentro da janela que termina no instante mostrado. */
+function janelaDe(chave, horas) {
+  const fim = relogioAtual();
+  const inicio = fim - horas * 3600 * 1000;
+  return (historico.get(chave) || []).filter((p) => {
+    const t = emMs(p);
+    return t >= inicio && t <= fim;
+  });
+}
+
+const estadoDe = (chave) => estadoAtual(historico.get(chave) || [], relogioAtual());
+
+/* ---------------- utilidades de texto ---------------- */
+
 function relogio(iso) {
   return iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—";
+}
+function relogioMs(ms) {
+  return ms ? new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—";
+}
+function diaEHora(ms) {
+  return new Date(ms).toLocaleString("pt-BR", {
+    weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
+  });
 }
 function guardar(a){ try{ localStorage.setItem(CHAVE, JSON.stringify(a)); }catch(e){} }
 function recuperar(){ try{ const t=localStorage.getItem(CHAVE); return t?JSON.parse(t):null; }catch(e){ return null; } }
@@ -257,6 +885,63 @@ function faixa(txt) {
   if (!txt) { f.classList.remove("ver"); return; }
   f.textContent = txt;
   f.classList.add("ver");
+}
+
+/** O nome do lugar: a cerca em que o ponto cai, ou a coordenada. */
+const lugarDe = (p) => nomearLugar(p, cercas);
+
+/** Ícone de ondas do sinal — sem cor, como pede o item 3. */
+function ondas(barras) {
+  const arco = (r, on) =>
+    '<path d="M0,' + r + ' A' + r + ',' + r + ' 0 0 1 ' + r + ',0" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" ' +
+    'opacity="' + (on ? 1 : .22) + '" />';
+  const corte = barras === 0
+    ? '<line x1="1" y1="11" x2="11" y2="1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'
+    : "";
+  return '<svg class="ondas" width="13" height="13" viewBox="-0.5 -0.5 13 13" aria-hidden="true">' +
+    '<circle cx="0.6" cy="11.4" r="1.1" fill="currentColor" opacity="' + (barras > 0 ? 1 : .22) + '"/>' +
+    '<g transform="translate(0.6,11.4) rotate(-90)">' +
+    arco(4.5, barras >= 1) + arco(7.5, barras >= 3) + arco(10.5, barras >= 3) +
+    "</g>" + corte + "</svg>";
+}
+
+/** Pin em gota, pintado pelo farol. Sem sinal, ele esmaece — mas não some. */
+function iconePin(estado, aberto) {
+  const cor = COR_FAROL[estado.farol] || COR_FAROL.verde;
+  const gota =
+    '<svg width="30" height="40" viewBox="0 0 30 40">' +
+    '<path d="M15 39C15 39 28 23.5 28 14A13 13 0 1 0 2 14C2 23.5 15 39 15 39Z" ' +
+    'fill="' + cor + '" stroke="#fff" stroke-width="' + (aberto ? 3.5 : 2.5) + '"/>' +
+    '<circle cx="15" cy="14" r="5.2" fill="#fff" opacity="' + (aberto ? .95 : .8) + '"/>' +
+    "</svg>";
+  return L.divIcon({
+    className: "",
+    html: '<div class="pin' + (estado.sinal.mudo ? " apagado" : "") + '">' + gota + "</div>",
+    iconSize: [30, 40], iconAnchor: [15, 39], tooltipAnchor: [0, -34],
+  });
+}
+
+/**
+ * Balão do ativo: nome, status, sinal e localidade. Sem sinal, diz há quanto
+ * tempo foi a última notícia — é a pergunta que a pessoa faz nessa hora.
+ */
+function balaoAtivo(chave, estado) {
+  const s = estado.sinal;
+  const sinalTxt = s.mudo
+    ? "sem sinal há " + duracao(s.minutos * 60000)
+    : s.nivel === "fraco" ? "sinal fraco" : "sinal bom";
+  return '<div class="balao">' +
+    '<div class="tit">' + escapar(nomeDe(chave)) + "</div>" +
+    "<div>" + escapar(textoStatus(estado)) + "</div>" +
+    '<div class="cinza">' + ondas(s.barras) + " " + escapar(sinalTxt) + "</div>" +
+    '<div class="cinza">' + escapar(lugarDe(estado.posicao)) + "</div>" +
+    "</div>";
+}
+
+function escapar(t) {
+  return String(t == null ? "" : t).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 /* ---------------- acesso ---------------- */
@@ -307,71 +992,259 @@ function abrirPainel() {
   el("cab-escopo").textContent =
     (acesso.tipo === "familia" ? "FAMÍLIA " : "GRUPO ") + acesso.nome.toUpperCase();
 
-  el("janelas").innerHTML = "";
-  JANELAS.forEach((h) => {
-    const b = document.createElement("button");
-    b.textContent = h + "h";
-    b.className = h === janela ? "on" : "";
-    b.onclick = () => {
-      janela = h; primeira = true; seguir = true;
-      [...el("janelas").children].forEach((x, i) => x.className = JANELAS[i] === janela ? "on" : "");
-      buscar();
-    };
-    el("janelas").appendChild(b);
-  });
-
   iniciarMapa();
+  iniciarTimeline();
   buscar();
   setInterval(buscar, INTERVALO_MS);
-  setInterval(tiquetaque, 1000);
+  setInterval(pintarTudo, 30000); // o tempo passa mesmo sem ponto novo
 }
 
 function iniciarMapa() {
-  mapa = L.map("mapa").setView([-20.3155, -40.3128], 13);
+  mapa = L.map("mapa").setView([-20.3155, -40.3128], 12);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19, attribution: "&copy; OpenStreetMap"
   }).addTo(mapa);
-  mapa.on("dragstart", () => { seguir = false; });
-  el("b-centrar").onclick = () => {
-    seguir = true;
-    if (marca) mapa.setView(marca.getLatLng(), Math.max(mapa.getZoom(), 16));
+  camadaCercas = L.layerGroup().addTo(mapa);
+  camadaRota = L.layerGroup().addTo(mapa);
+  mapa.on("click", (e) => {
+    if (!desenhando) return;
+    desenhando.push({ lat: e.latlng.lat, lng: e.latlng.lng });
+    desenharCercas();
+    atualizarBarraCerca();
+  });
+  el("b-centrar").onclick = () => { selecionado = null; enquadrado = false; pintarTudo(); };
+  prepararBotoesDeCerca();
+}
+
+/* ---- desenhar cerca ponto a ponto, só para quem entra como família ---- */
+
+function prepararBotoesDeCerca() {
+  const barra = el("cercas-barra");
+  barra.style.display = podeEditarCercas() ? "flex" : "none";
+  if (!podeEditarCercas()) return;
+
+  el("b-nova-cerca").onclick = () => {
+    desenhando = [];
+    atualizarBarraCerca();
+    desenharCercas();
   };
+  el("b-desfazer").onclick = () => {
+    if (desenhando) desenhando.pop();
+    desenharCercas();
+    atualizarBarraCerca();
+  };
+  el("b-cancelar").onclick = () => {
+    desenhando = null;
+    atualizarBarraCerca();
+    desenharCercas();
+  };
+  el("b-salvar").onclick = async () => {
+    const nome = (prompt("Nome do lugar (é o que vai aparecer no lugar da coordenada):") || "").trim();
+    const problema = validar(nome, desenhando);
+    if (problema) { faixa(problema); return; }
+    try {
+      await salvarCerca(nome, desenhando);
+      desenhando = null;
+      cercas = await carregarCercas();
+      faixa(null);
+      atualizarBarraCerca();
+      desenharCercas();
+      pintarTudo();
+    } catch (e) {
+      faixa(e.message);
+    }
+  };
+  atualizarBarraCerca();
+}
+
+function atualizarBarraCerca() {
+  if (!podeEditarCercas()) return;
+  const ativo = desenhando !== null;
+  el("b-nova-cerca").style.display = ativo ? "none" : "";
+  ["b-desfazer", "b-cancelar", "b-salvar"].forEach((i) => {
+    el(i).style.display = ativo ? "" : "none";
+  });
+  el("b-salvar").disabled = !ativo || desenhando.length < 3;
+  el("dica-cerca").textContent = ativo
+    ? (desenhando.length < 3
+        ? "Clique no mapa para marcar os cantos do lugar (mínimo 3)."
+        : desenhando.length + " pontos — clique em Salvar quando fechar o contorno.")
+    : "";
+}
+
+/**
+ * As cercas existentes, mais a que está sendo desenhada. Elas ficam por baixo
+ * da rota e dos pins: servem de fundo, não podem competir com o ativo.
+ */
+function desenharCercas() {
+  if (!camadaCercas) return;
+  camadaCercas.clearLayers();
+
+  cercas.forEach((c) => {
+    if (!c.pontos || c.pontos.length < 3) return;
+    const poli = L.polygon(c.pontos.map((p) => [p.lat, p.lng]), {
+      color: "#2E7D74", weight: 2, opacity: .8, fillColor: "#2E7D74", fillOpacity: .08,
+    }).addTo(camadaCercas);
+    poli.bindTooltip('<div class="balao"><div class="tit">' + escapar(c.nome) + "</div></div>",
+      { direction: "top", className: "balao", opacity: 1 });
+    if (podeEditarCercas()) {
+      poli.on("click", async (ev) => {
+        if (desenhando) return;               // desenhando, o clique é vértice
+        L.DomEvent.stop(ev);
+        if (!confirm('Apagar a cerca "' + c.nome + '"? Os lugares voltam a aparecer como coordenada.')) return;
+        try {
+          await removerCerca(c.id);
+          cercas = await carregarCercas();
+          desenharCercas();
+          pintarTudo();
+        } catch (e) { faixa(e.message); }
+      });
+    }
+  });
+
+  if (desenhando && desenhando.length) {
+    desenhando.forEach((p) => {
+      L.circleMarker([p.lat, p.lng], {
+        radius: 4, color: "#16202B", weight: 2, fillColor: "#fff", fillOpacity: 1,
+      }).addTo(camadaCercas);
+    });
+    if (desenhando.length > 1) {
+      const contorno = fechar(desenhando);
+      L.polyline(contorno.map((p) => [p.lat, p.lng]),
+        { color: "#16202B", weight: 2, dashArray: "5 4" }).addTo(camadaCercas);
+    }
+  }
 }
 
 async function buscar() {
   try {
     aparelhos = await carregarAparelhos();
+    await atualizarHistorico();
     faixa(null);
   } catch (e) {
     faixa(e.message);
     return;
   }
-
-  if (!alvo && aparelhos.length) {
-    alvo = { grupo: aparelhos[0].grupo, dispositivo: aparelhos[0].dispositivo };
-  }
-  desenharLista();
-
-  if (!alvo) { el("cab-titulo").textContent = "Nenhum aparelho ainda"; return; }
-
-  let pontos;
+  // As cercas mudam de vez em quando, não de 15 em 15 segundos: se o
+  // servidor ainda não as tem, o monitor continua funcionando com
+  // coordenadas em vez de nomes, e não é isso que vai derrubar a tela.
   try {
-    pontos = (await carregarPontos(alvo.grupo, alvo.dispositivo)) || [];
+    cercas = await carregarCercas();
+    desenharCercas();
   } catch (e) {
-    faixa(e.message);
-    return;
+    cercas = [];
   }
-  desenharMapa(pontos);
+  pintarTudo();
 }
 
-function desenharLista() {
+/* ---------------- desenho ---------------- */
+
+function pintarTudo() {
+  el("cab-titulo").textContent = aparelhos.length
+    ? aparelhos.length + (aparelhos.length === 1 ? " ativo" : " ativos")
+    : "Nenhum aparelho ainda";
+  desenharPins();
+  desenharRota();
+  desenharPainelLateral();
+  atualizarRotuloTempo();
+}
+
+/**
+ * Um pin por ativo, sempre todos, na posição do instante mostrado. O mapa
+ * abre assim (item 5): a rota só entra quando alguém escolhe um ativo.
+ */
+function desenharPins() {
+  const vivos = new Set();
+
+  aparelhos.forEach((a) => {
+    const chave = chaveDe(a);
+    const estado = estadoDe(chave);
+    if (!estado.posicao) return;
+    vivos.add(chave);
+
+    const onde = [estado.posicao.lat, estado.posicao.lng];
+    let pin = pins.get(chave);
+    if (!pin) {
+      pin = L.marker(onde, { icon: iconePin(estado, false) }).addTo(mapa);
+      pin.on("click", () => {
+        selecionado = selecionado === chave ? null : chave;
+        enquadrado = false;
+        pintarTudo();
+      });
+      pins.set(chave, pin);
+    } else {
+      pin.setLatLng(onde);
+      pin.setIcon(iconePin(estado, selecionado === chave));
+    }
+    pin.bindTooltip(balaoAtivo(chave, estado), {
+      direction: "top", className: "balao", opacity: 1,
+    });
+  });
+
+  // Aparelho que sumiu da lista do servidor não pode deixar pin órfão.
+  [...pins.keys()].forEach((chave) => {
+    if (!vivos.has(chave)) { pins.get(chave).remove(); pins.delete(chave); }
+  });
+
+  if (!enquadrado && pins.size) {
+    const alvos = selecionado && pins.has(selecionado) ? [pins.get(selecionado)] : [...pins.values()];
+    mapa.fitBounds(L.latLngBounds(alvos.map((p) => p.getLatLng())),
+      { padding: [60, 60], maxZoom: selecionado ? 16 : 15 });
+    enquadrado = true;
+  }
+}
+
+/**
+ * A rota das últimas 24 h do ativo escolhido: a linha, um pontinho a cada
+ * 500 m percorridos e um balão em cada parada. Só do escolhido — com todos
+ * ao mesmo tempo o mapa vira um rabisco.
+ */
+function desenharRota() {
+  camadaRota.clearLayers();
+  if (!selecionado) return;
+
+  const pontos = janelaDe(selecionado, HORAS_ROTA);
+  const t = prepararTrilha(pontos);
+  if (t.trilha.length > 1) {
+    L.polyline(t.trilha.map((p) => [p.lat, p.lng]),
+      { color: "#16202B", weight: 3, opacity: .55, lineJoin: "round" }).addTo(camadaRota);
+    // marcosDeDistancia vem do núcleo: é a mesma conta que o app faz.
+    marcosDeDistancia(t.trilha).forEach((m) => {
+      L.circleMarker([m.lat, m.lng], {
+        radius: 3.5, color: "#16202B", weight: 1.5, fillColor: "#fff", fillOpacity: 1
+      }).bindTooltip(
+        '<span class="marco">' + relogio(m.hora) + " · " + (m.metros / 1000).toFixed(1) + " km</span>",
+        { direction: "top", className: "balao", opacity: 1 }
+      ).addTo(camadaRota);
+    });
+  }
+
+  calcularTrechos(pontos).forEach((tr) => {
+    if (tr.tipo !== "parada" || !tr.ancora) return;
+    L.circleMarker([tr.ancora.lat, tr.ancora.lng], {
+      radius: 6, color: "#16202B", weight: 2, fillColor: "#EDF1F5", fillOpacity: .9
+    }).bindTooltip(
+      '<div class="balao"><div class="tit">Parada</div>' +
+      "<div>" + relogioMs(tr.inicio) + " às " + relogioMs(tr.fim) + "</div>" +
+      '<div class="cinza">' + duracao(tr.fim - tr.inicio) + " · " +
+      escapar(lugarDe(tr.ancora)) + "</div></div>",
+      { direction: "top", className: "balao", opacity: 1 }
+    ).addTo(camadaRota);
+  });
+}
+
+/* ---------------- lista e detalhe (item 8) ---------------- */
+
+function desenharPainelLateral() {
   const c = el("lista");
   c.innerHTML = "";
+
   if (!aparelhos.length) {
     c.innerHTML = '<p style="font-size:14px;line-height:1.5;color:var(--suave);padding:8px 2px">'
-      + 'Nenhum aparelho enviou dados ainda. Ligue o rastreio no app do celular.</p>';
+      + "Nenhum aparelho enviou dados ainda. Ligue o rastreio no app do celular.</p>";
     return;
   }
+  if (selecionado) { desenharDetalhe(c); return; }
 
   const grupos = [];
   aparelhos.forEach((a) => { if (grupos.indexOf(a.grupo) < 0) grupos.push(a.grupo); });
@@ -383,78 +1256,129 @@ function desenharLista() {
     c.appendChild(t);
 
     aparelhos.filter((a) => a.grupo === g).forEach((a) => {
-      const on = alvo && alvo.grupo === g && alvo.dispositivo === a.dispositivo;
+      const chave = chaveDe(a);
+      const e = estadoDe(chave);
       const d = document.createElement("div");
-      d.className = "item" + (on ? " on" : "");
-      d.innerHTML = '<span class="bola" style="background:' + corPor(a.hora) + '"></span>'
-        + '<div><div class="nome"></div><div class="sub"></div></div>';
-      d.querySelector(".nome").textContent = a.dispositivo;
-      d.querySelector(".sub").textContent =
-        relogio(a.hora) + " · há " + haQuanto(a.hora) + " · " + a.total + " pts";
-      d.onclick = () => {
-        alvo = { grupo: g, dispositivo: a.dispositivo };
-        primeira = true; seguir = true; buscar();
-      };
+      d.className = "item";
+      d.innerHTML =
+        '<span class="bola" style="background:' + (COR_FAROL[e.farol] || "var(--parado)") + '"></span>' +
+        '<div class="corpo">' +
+          '<div class="nome"><span class="n"></span>' +
+            '<span class="' + (e.sinal.mudo ? "mudo" : "") + '">' + ondas(e.sinal.barras) + "</span>" +
+          "</div>" +
+          '<div class="campo"><b class="st"></b></div>' +
+          '<div class="campo lc"></div>' +
+        "</div>";
+      d.querySelector(".n").textContent = a.dispositivo;
+      d.querySelector(".st").textContent = textoStatus(e);
+      d.querySelector(".lc").textContent = lugarDe(e.posicao);
+      d.onclick = () => { selecionado = chave; enquadrado = false; pintarTudo(); };
       c.appendChild(d);
     });
   });
 }
 
-function desenharMapa(pontos) {
-  el("v-qtd").textContent = pontos.length;
+function desenharDetalhe(c) {
+  const e = estadoDe(selecionado);
+  const pontos = janelaDe(selecionado, HORAS_ROTA);
+  const trechos = calcularTrechos(pontos);
+  const lugares = resumoPorLugar(trechos, lugarDe);
+  const s = e.sinal;
 
-  if (!pontos.length) {
-    el("cab-titulo").textContent = alvo.dispositivo + " · sem pontos no período";
-    el("pulso").classList.remove("on");
-    ["v-hora", "v-atraso", "v-vel", "v-prec"].forEach((i) => el(i).textContent = "—");
-    return;
+  const voltar = document.createElement("div");
+  voltar.className = "volta";
+  voltar.textContent = "← todos os ativos";
+  voltar.onclick = () => { selecionado = null; enquadrado = false; pintarTudo(); };
+  c.appendChild(voltar);
+
+  const caixa = document.createElement("div");
+  caixa.className = "detalhe";
+  caixa.innerHTML =
+    "<h2></h2>" +
+    '<div class="kicker" style="margin-top:2px"></div>' +
+    '<div style="margin-top:12px">' +
+      '<div class="linha-campo"><span class="rot">Status</span><span class="val st"></span></div>' +
+      '<div class="linha-campo"><span class="rot">Localidade</span><span class="val lc"></span></div>' +
+      '<div class="linha-campo"><span class="rot">Sinal</span><span class="val sn"></span></div>' +
+    "</div>" +
+    '<div class="secao">Onde ficou nas últimas ' + HORAS_ROTA + " h</div>" +
+    '<div class="lugares"></div>' +
+    '<div class="secao">Trechos</div>' +
+    '<div class="trechos"></div>';
+
+  caixa.querySelector("h2").textContent = nomeDe(selecionado);
+  caixa.querySelector(".kicker").textContent = grupoDe(selecionado);
+  caixa.querySelector(".st").textContent = textoStatus(e);
+  caixa.querySelector(".st").style.color = COR_FAROL[e.farol] || "";
+  caixa.querySelector(".lc").textContent = lugarDe(e.posicao);
+  caixa.querySelector(".sn").innerHTML = ondas(s.barras) + " " +
+    escapar(s.mudo ? "sem sinal há " + duracao(s.minutos * 60000)
+      : s.nivel === "fraco" ? "fraco" : "bom");
+
+  const alvoLugares = caixa.querySelector(".lugares");
+  if (!lugares.length) {
+    alvoLugares.innerHTML = '<p class="campo" style="color:var(--suave)">Sem parada registrada no período.</p>';
+  } else {
+    lugares.forEach((l) => {
+      const d = document.createElement("div");
+      d.className = "lugar";
+      d.innerHTML = '<span class="nom"></span><span class="dur"></span>';
+      d.querySelector(".nom").textContent = l.lugar + (l.visitas > 1 ? " (" + l.visitas + "×)" : "");
+      d.querySelector(".dur").textContent = duracao(l.total);
+      alvoLugares.appendChild(d);
+    });
   }
 
-  const coords = pontos.map((p) => [p.lat, p.lng]);
-  const u = pontos[pontos.length - 1];
-  const atrasoMin = (Date.now() - new Date(u.hora).getTime()) / 60000;
-
-  if (trilha) trilha.remove();
-  trilha = L.polyline(coords, { color: "#16202B", weight: 3, opacity: .55, lineJoin: "round" }).addTo(mapa);
-
-  if (halo) halo.remove();
-  if (u.precisao) {
-    halo = L.circle([u.lat, u.lng], {
-      radius: u.precisao, color: "#2E7D74", fillColor: "#2E7D74", fillOpacity: .12, weight: 1
-    }).addTo(mapa);
+  const alvoTrechos = caixa.querySelector(".trechos");
+  const emOrdem = trechos.slice().reverse();
+  if (!emOrdem.length) {
+    alvoTrechos.innerHTML = '<p class="campo" style="color:var(--suave)">Sem histórico no período.</p>';
+  } else {
+    emOrdem.forEach((t) => {
+      const d = document.createElement("div");
+      d.className = "lugar";
+      d.innerHTML = '<span class="nom"></span><span class="dur"></span>';
+      d.querySelector(".nom").textContent = relogioMs(t.inicio) + " · " +
+        (t.tipo === "parada" ? lugarDe(t.ancora) : "em movimento");
+      d.querySelector(".dur").textContent = duracao(t.fim - t.inicio);
+      alvoTrechos.appendChild(d);
+    });
   }
 
-  if (marca) marca.remove();
-  marca = L.marker([u.lat, u.lng], {
-    icon: L.divIcon({ className: "", html: '<div class="atual"></div>', iconSize: [18, 18], iconAnchor: [9, 9] })
-  }).addTo(mapa);
-
-  if (primeira) {
-    mapa.fitBounds(trilha.getBounds(), { padding: [40, 40], maxZoom: 17 });
-    primeira = false;
-  } else if (seguir) {
-    mapa.panTo([u.lat, u.lng]);
-  }
-
-  const vivo = atrasoMin < 3;
-  el("pulso").classList.toggle("on", vivo);
-  el("cab-titulo").textContent = alvo.dispositivo + " · "
-    + (vivo ? "ao vivo" : atrasoMin < 30 ? "atrasado" : "sem sinal");
-
-  el("v-hora").textContent = relogio(u.hora);
-  el("v-atraso").textContent = haQuanto(u.hora);
-  el("v-atraso").style.color = corPor(u.hora);
-  el("v-vel").textContent = (u.velocidade != null && u.velocidade >= 0)
-    ? (u.velocidade * 3.6).toFixed(0) + " km/h" : "—";
-  el("v-prec").textContent = u.precisao ? Math.round(u.precisao) + " m" : "—";
+  c.appendChild(caixa);
 }
 
-function tiquetaque() {
-  if (!alvo) return;
-  const a = aparelhos.find((x) => x.grupo === alvo.grupo && x.dispositivo === alvo.dispositivo);
-  if (!a) return;
-  el("v-atraso").textContent = haQuanto(a.hora);
-  el("v-atraso").style.color = corPor(a.hora);
+/* ---------------- timeline (item 6) ----------------
+   A barra anda em minutos ao longo dos últimos 7 dias e o extremo direito é
+   sempre o agora. Arrastar não busca nada no servidor: o histórico já está
+   aqui, e o que muda é o relógio com que tudo é recalculado — pins, farol,
+   status e rota voltam juntos para aquele momento.
+--------------------------------------------------- */
+
+const MINUTOS_TIMELINE = DIAS_TIMELINE * 24 * 60;
+
+function iniciarTimeline() {
+  const barra = el("t-barra");
+  barra.max = String(MINUTOS_TIMELINE);
+  barra.value = String(MINUTOS_TIMELINE);
+
+  barra.addEventListener("input", () => {
+    const atras = MINUTOS_TIMELINE - Number(barra.value);
+    instante = atras === 0 ? null : Date.now() - atras * 60000;
+    pintarTudo();
+  });
+  el("b-agora").onclick = () => {
+    instante = null;
+    barra.value = String(MINUTOS_TIMELINE);
+    pintarTudo();
+  };
+  atualizarRotuloTempo();
+}
+
+function atualizarRotuloTempo() {
+  const passado = instante != null;
+  el("tempo").classList.toggle("passado", passado);
+  el("t-quando").textContent = passado ? diaEHora(instante) : "agora · " + diaEHora(Date.now());
 }
 
 /* ---------------- início ---------------- */
