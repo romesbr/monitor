@@ -545,6 +545,45 @@ function dataHoraLocal(valor) {
   });
 }
 
+/**
+ * O horário de um instante que pode NÃO ser de hoje.
+ *
+ *   hoje    → "14:32"
+ *   ontem   → "ontem 14:32"
+ *   antes   → "sáb, 08/08 14:32"
+ *
+ * Existe por causa de um problema real, relatado em 10/08/2026: a tela dizia
+ * "parou 8:51" e não havia como saber se era daquela manhã, da véspera ou de
+ * dois dias antes. Num aparelho que parou de dar notícia, essa é justamente a
+ * pergunta — e a resposta some exatamente quando mais importa, porque quanto
+ * mais velho o dado, mais ambíguo fica o "8:51".
+ *
+ * Escrever a data sempre resolveria e custaria caro: a maior parte do que o
+ * painel mostra é de agora, e "seg, 10/08 14:32" repetido em toda linha vira
+ * ruído que se aprende a não ler. Então a data só aparece quando muda a
+ * resposta — que é quando o instante não é de hoje.
+ *
+ * `agora` entra por parâmetro para o teste poder fixar o presente; sem isso
+ * a prova passaria hoje e falharia amanhã.
+ */
+function momentoLocal(valor, agora = Date.now()) {
+  const ms = paraMs(valor);
+  if (!instanteValido(ms)) return nada;
+
+  const dia = inicioDoDiaLocal(ms);
+  const hoje = inicioDoDiaLocal(agora);
+  if (dia == null || hoje == null) return dataHoraLocal(ms);
+
+  if (dia === hoje) return horaLocal(ms);
+  // Um dia de diferença medido pelo começo de cada dia, e não por 24h
+  // cravadas: na virada do horário de verão o dia tem 23 ou 25 horas, e
+  // subtrair 86400000 do instante erraria a conta justamente ali.
+  if (dia === inicioDoDiaLocal(hoje - 12 * 60 * 60 * 1000)) {
+    return "ontem " + horaLocal(ms);
+  }
+  return dataHoraLocal(ms);
+}
+
 /** "07/08/2026 14:32" — o carimbo completo, para exportação e conferência. */
 function carimboLocal(valor) {
   const ms = paraMs(valor);
@@ -1378,8 +1417,12 @@ const estadoDe = (chave) => estadoAtual(historico.get(chave) || [], relogioAtual
    herdar o do computador. O painel do pátio acerta por acaso; qualquer
    máquina com o fuso errado mostrava outra hora com a mesma cara de certa,
    e turno que vira a meia-noite era agrupado no dia errado sem avisar. */
-function relogio(iso) { return horaLocal(iso); }
-function relogioMs(ms) { return horaLocal(ms); }
+/* Com data quando o instante não é de hoje (ver momentoLocal, no núcleo):
+   a rota de 24 h atravessa a meia-noite, a timeline alcança 7 dias, e a
+   última posição de um aparelho mudo pode ser de sábado. "8:51" sozinho não
+   respondia de quando era, justamente no caso em que isso mais importa. */
+function relogio(iso) { return momentoLocal(iso); }
+function relogioMs(ms) { return momentoLocal(ms); }
 function diaEHora(ms) { return dataHoraLocal(ms); }
 function guardar(a){ try{ localStorage.setItem(CHAVE, JSON.stringify(a)); }catch(e){} }
 function recuperar(){ try{ const t=localStorage.getItem(CHAVE); return t?JSON.parse(t):null; }catch(e){ return null; } }
