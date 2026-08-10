@@ -570,17 +570,32 @@ function momentoLocal(valor, agora = Date.now()) {
   const ms = paraMs(valor);
   if (!instanteValido(ms)) return nada;
 
-  const dia = inicioDoDiaLocal(ms);
-  const hoje = inicioDoDiaLocal(agora);
-  if (dia == null || hoje == null) return dataHoraLocal(ms);
+  // Compara o DIA escrito ("2026-08-10"), não um instante calculado.
+  //
+  // A primeira versão comparava inicioDoDiaLocal() dos dois lados, e isso
+  // falhou no aparelho enquanto passava nos testes: aquela conta depende de
+  // reler um texto de data com `new Date(...)`, e o motor do Android
+  // (Hermes) não interpreta igual ao Node. Vinha NaN, `NaN === NaN` é
+  // falso, e TODA data saía por extenso — inclusive a de hoje.
+  //
+  // Relatado em campo em 10/08/2026, no mesmo print que provou o rastreio
+  // em segundo plano funcionando. Lição para o projeto inteiro: a prova
+  // roda no Node e o app roda no Hermes, então conta que depende de
+  // interpretar texto de data não é coberta por teste nenhum daqui.
+  const dia = diaLocal(ms);
+  const hoje = diaLocal(agora);
+  if (!dia || !hoje) return dataHoraLocal(ms);
 
   if (dia === hoje) return horaLocal(ms);
-  // Um dia de diferença medido pelo começo de cada dia, e não por 24h
-  // cravadas: na virada do horário de verão o dia tem 23 ou 25 horas, e
-  // subtrair 86400000 do instante erraria a conta justamente ali.
-  if (dia === inicioDoDiaLocal(hoje - 12 * 60 * 60 * 1000)) {
-    return "ontem " + horaLocal(ms);
-  }
+
+  // Ontem, calculado sobre o próprio texto do dia: meio-dia UTC é longe o
+  // bastante das bordas para o horário de verão não empurrar a data para o
+  // dia errado.
+  const ontem = new Date(Date.parse(hoje + "T12:00:00Z") - 86400000)
+    .toISOString()
+    .slice(0, 10);
+  if (dia === ontem) return "ontem " + horaLocal(ms);
+
   return dataHoraLocal(ms);
 }
 
@@ -605,7 +620,17 @@ function carimboLocal(valor) {
 function diaLocal(valor) {
   const ms = paraMs(valor);
   if (!instanteValido(ms)) return null;
-  return new Date(ms).toLocaleDateString("en-CA", { timeZone: FUSO });
+  // Montado peça por peça, e não por formato de locale: "en-CA" devolve
+  // AAAA-MM-DD no navegador e no Node, mas o motor do Android (Hermes) não
+  // garante o mesmo. formatToParts é a única forma que devolve as peças
+  // nomeadas, sem depender de como cada motor escreve a data.
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: FUSO, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date(ms));
+  const p = {};
+  for (const parte of partes) p[parte.type] = parte.value;
+  if (!p.year || !p.month || !p.day) return null;
+  return `${p.year}-${p.month}-${p.day}`;
 }
 
 /**
@@ -626,16 +651,44 @@ function inicioDoDiaLocal(valor) {
   return comoUtc + deslocamentoMs(comoUtc);
 }
 
-/** Quanto o fuso da operação está atrás/à frente do UTC naquele instante. */
+/**
+ * Quanto o fuso da operação está atrás/à frente do UTC naquele instante.
+ *
+ * A versão anterior fazia `new Date(d.toLocaleString("en-US", …))` — ou
+ * seja, escrevia a data como texto e mandava o motor reler. Funciona no
+ * Node e no navegador; **no Hermes, que é o motor do app Android, não é
+ * garantido**, e o resultado vira NaN em silêncio. Como NaN contamina toda
+ * conta que toca nele, `inicioDoDiaLocal` passava a devolver NaN e tudo o
+ * que depende dele (cobertura, começo de turno, agrupamento por dia) errava
+ * sem dar erro.
+ *
+ * Descoberto em 10/08/2026 pelo sintoma visível — toda data saindo por
+ * extenso na tela — mas o estrago silencioso era maior que o visível.
+ *
+ * Agora as peças da data vêm nomeadas por formatToParts e são remontadas em
+ * ISO, que é o único formato que TODO motor de JavaScript é obrigado a
+ * interpretar igual.
+ */
 function deslocamentoMs(ms) {
-  const d = new Date(ms);
-  // "07/08/2026, 21:00:00" no fuso alvo, relido como se fosse UTC: a
-  // diferença para o instante original é exatamente o deslocamento.
-  const local = new Date(
-    d.toLocaleString("en-US", { timeZone: FUSO })
-  ).getTime();
-  const utc = new Date(d.toLocaleString("en-US", { timeZone: "UTC" })).getTime();
-  return utc - local;
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: FUSO,
+    hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(new Date(ms));
+
+  const p = {};
+  for (const parte of partes) p[parte.type] = parte.value;
+  // Meia-noite sai como "24" em alguns motores; em ISO isso não existe.
+  const hora = p.hour === "24" ? "00" : p.hour;
+
+  const comoUtc = Date.parse(
+    `${p.year}-${p.month}-${p.day}T${hora}:${p.minute}:${p.second}Z`
+  );
+  if (Number.isNaN(comoUtc)) return 0;
+  // Os milissegundos não entram na remontagem; arredondar evita um segundo
+  // de sobra virar diferença de fuso.
+  return Math.round((ms - comoUtc) / 1000) * 1000;
 }
 
 /* ---------- src/paradas.js ---------- */
