@@ -77,6 +77,27 @@ publicar em `main` é publicar em produção. Por isso o passo de conferência
 acima (`conferir.js`, `prova.js`) é o que existe no lugar de testes
 automatizados de CI.
 
+## O cache do navegador esconde a publicação
+
+Publicar em `main` põe o arquivo novo no ar em menos de um minuto — mas o
+navegador de quem já visitou continua servindo a versão guardada, e
+`Ctrl+Shift+R` nem sempre vence.
+
+Aconteceu em 10/08/2026: uma versão com defeito foi publicada, revertida em
+seguida, e o dono continuou vendo o painel vazio por um bom tempo. O
+arquivo no ar já era o certo — conferido por md5 contra o `main` — e o que
+ele via era o antigo, do cache.
+
+**Como confirmar que é cache, e não o site:** abrir numa janela anônima.
+Ela ignora o cache por completo. Se funcionar ali, é cache; se não, é o
+site de verdade.
+
+**Por que isto importa mais do que parece:** o painel de parede
+(`CONTEXTO-VTU` 5.4) fica aberto o dia inteiro, sem ninguém recarregando.
+Uma correção publicada pode simplesmente não chegar nele até alguém fechar
+e abrir o navegador — e ninguém vai desconfiar disso, porque a página
+"está funcionando".
+
 ## Byte nulo: a armadilha que já aconteceu neste arquivo
 
 `chaveDe`/`nomeDe`/`grupoDe`, perto do topo do segundo `<script>`, separam
