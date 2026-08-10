@@ -1600,6 +1600,22 @@ function abrirPainel() {
   prepararModoParede();
   buscar();
   setInterval(buscar, INTERVALO_MS);
+
+  /* O navegador do celular CONGELA os temporizadores da aba que vai para
+     segundo plano — trocar de aplicativo basta. Quando a aba volta, o
+     intervalo de 15 s pode ter passado minutos sem disparar, e a tela fica
+     mostrando a última busca de antes da troca, com cara de atual.
+
+     Relatado em campo em 10/08/2026: o site marcava 10:56 às 11:12, com o
+     celular já tendo enviado tudo (fila de envio zerada). O dono tinha
+     notado o efeito e atribuído à aba Monitor do app; era a volta ao
+     navegador que descongelava a busca.
+
+     Buscar assim que a aba reaparece custa uma requisição e devolve o
+     painel ao presente na hora, em vez de esperar o próximo intervalo. */
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") buscar();
+  });
   setInterval(pintarTudo, 30000);        // o tempo passa mesmo sem ponto novo
   setInterval(atualizarContato, 5000);   // e a idade do dado corre mais rápido
 }
