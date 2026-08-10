@@ -1346,35 +1346,6 @@ async function carregarAparelhos() {
   return lista.map(function (d) { d.grupo = acesso.nome; return d; });
 }
 
-/**
- * O carimbo do último dado enviado por cada aparelho.
- *
- * Não baixa o bruto — pede ao banco só o `max(hora)` por aparelho, uma
- * linha cada. Baixar as ~2.880 leituras cruas diárias estouraria o teto de
- * 10.000 da consulta e encolheria a timeline sem avisar.
- *
- * Tolerante a falha de propósito: se `listar_contatos` ainda não existe no
- * servidor (o SQL pode não ter sido colado), o painel segue funcionando
- * como antes, com o sinal calculado sobre a posição. Perder o refinamento
- * é aceitável; derrubar a tela por causa de script pendente, não.
- */
-async function carregarContatos() {
-  try {
-    const lista = acesso.tipo === "familia"
-      ? await rpc("listar_contatos_familia", { p_nome: acesso.nome, p_senha: acesso.senha })
-      : await rpc("listar_contatos", { p_nome: acesso.nome, p_senha: acesso.senha });
-    const mapa = new Map();
-    (lista || []).forEach(function (c) {
-      const grupo = acesso.tipo === "familia" ? c.grupo : acesso.nome;
-      const ms = Date.parse(c.ultimo_contato);
-      if (Number.isFinite(ms)) mapa.set(grupo + "\u0000" + c.dispositivo, ms);
-    });
-    contatoDe = mapa;
-  } catch (e) {
-    // Silencioso: ver comentário acima.
-  }
-}
-
 function carregarPontos(grupo, dispositivo, horas) {
   if (acesso.tipo === "familia") {
     return rpc("listar_pontos_familia", {
@@ -1491,41 +1462,7 @@ function janelaDe(chave, horas) {
   });
 }
 
-/**
- * O estado do ativo, com o sinal corrigido pelo último dado enviado.
- *
- * `estadoAtual` calcula o sinal sobre os pontos que o painel baixou — e
- * esses excluem a leitura crua. Com a loco parada, isso fazia um aparelho
- * saudável parecer calado por até 10 minutos, e bastava um ponto de vida
- * atrasar para o painel gritar "sem sinal" sem motivo (os limiares do item
- * 3 são 12 e 15 min).
- *
- * O carimbo do servidor é a evidência melhor: ele enxerga também o que o
- * painel não baixa. Só substitui quando é MAIS RECENTE — na timeline
- * arrastada para o passado, o contato de agora não pode contaminar o
- * estado daquele instante.
- */
-/** O horário da última POSIÇÃO recebida — sem contar leitura crua. */
-function ultimaPosicaoMs(chave) {
-  const pts = historico.get(chave) || [];
-  let maior = null;
-  for (const p of pts) {
-    const t = emMs(p);
-    if (t != null && (maior == null || t > maior)) maior = t;
-  }
-  return maior;
-}
-
-function estadoDe(chave) {
-  const estado = estadoAtual(historico.get(chave) || [], relogioAtual());
-  const contato = contatoDe.get(chave);
-  const agora = relogioAtual();
-  if (contato != null && contato <= agora && contato > (estado.ultimoContatoMs ?? 0)) {
-    estado.ultimoContatoMs = contato;
-    estado.sinal = calcularSinal(contato, agora);
-  }
-  return estado;
-}
+const estadoDe = (chave) => estadoAtual(historico.get(chave) || [], relogioAtual());
 
 /* ---------------- utilidades de texto ---------------- */
 
@@ -1804,7 +1741,6 @@ async function buscar() {
   try {
     aparelhos = await carregarAparelhos();
     await atualizarHistorico();
-    await carregarContatos();
     ultimoContatoServidor = Date.now();
     falhaAtual = null;
     faixa(null);
@@ -2102,7 +2038,6 @@ function desenharDetalhe(c) {
       '<div class="linha-campo"><span class="rot">Localidade</span><span class="val lc"></span></div>' +
       '<div class="linha-campo"><span class="rot">Sinal</span><span class="val sn"></span></div>' +
       '<div class="linha-campo"><span class="rot">Última posição</span><span class="val up"></span></div>' +
-      '<div class="linha-campo"><span class="rot">Último dado</span><span class="val ud"></span></div>' +
       '<div class="linha-campo"><span class="rot">Locomotiva</span><span class="val lo"></span></div>' +
     "</div>" +
     '<div class="vinc-barra" style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"></div>' +
@@ -2124,19 +2059,7 @@ function desenharDetalhe(c) {
   caixa.querySelector(".sn").innerHTML = ondas(s.barras) + " " +
     escapar(s.mudo ? "sem sinal há " + duracao(s.minutos * 60000)
       : s.nivel === "fraco" ? "fraco" : "bom");
-  /* Dois campos, e a diferença entre eles é o ponto todo.
-     "Última posição" é quando o aparelho mandou uma posição de verdade —
-     com a loco parada, isso acontece de 10 em 10 min (item 2), então esse
-     carimbo fica velho SEM que nada esteja errado.
-     "Último dado" é a última notícia de qualquer tipo, inclusive a leitura
-     crua de 30 em 30 s. É a prova de que o aparelho está vivo agora.
-     Antes havia só o primeiro, e ele significava as duas coisas opostas:
-     parado e saudável, ou morto há dez minutos. */
-  const ultimaPos = ultimaPosicaoMs(selecionado);
-  caixa.querySelector(".up").textContent = ultimaPos
-    ? relogioMs(ultimaPos) + " (" + duracao(fim - ultimaPos) + ")"
-    : "—";
-  caixa.querySelector(".ud").textContent = e.ultimoContatoMs
+  caixa.querySelector(".up").textContent = e.ultimoContatoMs
     ? relogioMs(e.ultimoContatoMs) + " (" + duracao(fim - e.ultimoContatoMs) + ")"
     : "—";
   caixa.querySelector(".lo").textContent = loco || "sem vínculo";
