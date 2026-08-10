@@ -1020,14 +1020,7 @@ function textoStatus(estado) {
   if (estado.sinal && estado.sinal.mudo) {
     return "Sem sinal há " + duracao(estado.sinal.minutos * 60000);
   }
-  // "Em Deslocamento" ganhou duração em 10/08/2026, a pedido do dono: o
-  // status sem tempo não responde "há quanto tempo ele está assim?", que
-  // é metade da pergunta de quem olha o painel. `desde` marca o início do
-  // trecho atual, então serve para os dois casos.
-  if (estado.emMovimento) {
-    const ms = estado.desde != null ? Date.now() - estado.desde : null;
-    return ms != null && ms > 0 ? "Em Deslocamento há " + duracao(ms) : "Em Deslocamento";
-  }
+  if (estado.emMovimento) return "Em Deslocamento";
   return "Parado há " + duracao(estado.paradoMs);
 }
 
@@ -1262,46 +1255,6 @@ function validar(nome, pontos) {
   if (!nome || !nome.trim()) return "Dê um nome à cerca.";
   if (!pontos || pontos.length < 3) return "A cerca precisa de pelo menos três pontos.";
   return null;
-}
-
-
-/**
- * Há quanto tempo o ativo está NESTE lugar (CLAUDE.md itens 7 e 8).
- *
- * Pedido do dono em 10/08/2026, junto com a duração do status. São duas
- * perguntas diferentes e o painel só respondia uma:
- *
- *   - status  : há quanto tempo está PARADO (ou em deslocamento);
- *   - lugar   : há quanto tempo está NESTA localidade.
- *
- * Elas divergem no caso que mais interessa no pátio: uma locomotiva que
- * manobra dentro da mesma cerca sai de "parado" várias vezes sem nunca
- * sair do lugar. Pelo status ela está parada há 4 minutos; pelo lugar,
- * está no Pátio há três horas. Quem cobra tempo de ativo quer o segundo
- * número, e ele não existia.
- *
- * A conta anda de trás para frente pelas leituras boas enquanto o nome do
- * lugar não muda, e devolve quanto tempo faz desde a primeira leitura
- * desse trecho.
- *
- * Fora de cerca o nome é a coordenada, que muda a cada tremida do GPS —
- * então ali isto responde praticamente o mesmo que o tempo parado, e é o
- * comportamento certo: sem cerca, "o lugar" É o ponto onde ele está.
- */
-function tempoNoLugar(pontos, cercas, agora = Date.now()) {
-  const ps = leiturasBoas(pontos).filter((p) => emMs(p) <= agora);
-  if (!ps.length) return null;
-
-  const atual = nomearLugar(ps[ps.length - 1], cercas);
-  if (atual == null) return null;
-
-  let inicio = emMs(ps[ps.length - 1]);
-  for (let i = ps.length - 1; i >= 0; i--) {
-    if (nomearLugar(ps[i], cercas) !== atual) break;
-    inicio = emMs(ps[i]);
-  }
-  const ms = agora - inicio;
-  return ms > 0 ? ms : 0;
 }
 
 /* NUCLEO:FIM */
@@ -2167,14 +2120,7 @@ function desenharDetalhe(c) {
   caixa.querySelector(".kicker").textContent = grupo + " · aparelho " + aparelho;
   caixa.querySelector(".st").textContent = textoStatus(e);
   caixa.querySelector(".st").style.color = COR_FAROL[e.farol] || "";
-  /* A localidade ganha "há quanto tempo NESTE lugar", que é pergunta
-     diferente de "há quanto tempo parado". No pátio a loco manobra e
-     estaciona várias vezes sem sair da cerca: pelo status ela está parada
-     há 20 min, pelo lugar está no Pátio há 3 h. Quem mede ocupação de
-     ativo quer o segundo número. */
-  const noLugar = tempoNoLugar(historico.get(selecionado) || [], cercas, fim);
-  caixa.querySelector(".lc").textContent =
-    lugarDe(e.posicao) + (noLugar ? " · há " + duracao(noLugar) : "");
+  caixa.querySelector(".lc").textContent = lugarDe(e.posicao);
   caixa.querySelector(".sn").innerHTML = ondas(s.barras) + " " +
     escapar(s.mudo ? "sem sinal há " + duracao(s.minutos * 60000)
       : s.nivel === "fraco" ? "fraco" : "bom");
