@@ -57,6 +57,7 @@ estar clonado ao lado deste, como `../monitor`):
     node ferramentas/embutir.js    # leva o núcleo para cá
     node ferramentas/conferir.js   # barra nome repetido (tela em branco sem erro)
     node ferramentas/prova.js      # roda as contas com dados de teste
+    node ferramentas/render.js     # abre a página num navegador e olha se pintou
 
 Só depois disso o `index.html` atualizado é commitado **neste** repositório.
 `conferir.js` existe porque o trecho embutido vira um `<script>` no mesmo
@@ -66,6 +67,37 @@ derruba a página inteira, sem erro visível além da tela em branco.
 Se a mudança é só de UI do site — cor, layout, texto de balão, comportamento
 da timeline, desenho da cerca no mapa — ela é local, no segundo `<script>`
 deste `index.html`, e não precisa do `rastreio` nem do `embutir.js`.
+
+## `render.js`: o único que abre a página
+
+`conferir.js` e `prova.js` olham o arquivo como TEXTO. Nenhum dos dois carrega
+a página, e por isso os dois passam com folga num `index.html` que não pinta
+nada. Foi o que aconteceu em 10/08/2026: dois commits passaram nos dois e
+deixaram o monitor sem um único pin **no ar**, porque publicar na `main` é
+publicar em produção.
+
+`render.js` carrega o `index.html` num Chromium de verdade, com dados
+inventados servidos no lugar do Supabase, e confere três coisas: apareceu
+ativo na lista, apareceu pin no mapa, e a localidade saiu pela cerca **menor**.
+Qualquer erro de JavaScript vira falha — inclusive os que só acontecem no
+`setInterval`, que é onde o painel de parede morre calado.
+
+**Ele roda a página DUAS vezes, e a segunda é a que importa:** uma fingindo um
+servidor completo, e outra fingindo um servidor **sem** `listar_contatos` —
+que é o estado real sempre que um script de `sql/` foi escrito e ainda não foi
+colado no painel do Supabase. Foi exatamente esse o defeito de 10/08: a
+variável `contatoDe` só nascia dentro de um `try/catch` silencioso, e com a RPC
+faltando ela nunca nascia.
+
+**A regra que fica:** o servidor sempre vai atrás do site. Se o painel quebra
+quando uma RPC nova ainda não existe lá, ele está quebrado — e a prova precisa
+cobrir a ausência dela, não só a presença.
+
+Precisa do `playwright` instalado. Numa máquina que já tem o Chromium por fora
+(o contêiner do Claude Code tem), aponte com `CHROMIUM=/caminho/do/chrome`. O
+Leaflet é baixado uma vez e guardado na pasta temporária, então depois da
+primeira execução a prova roda offline. Se não conseguir o Leaflet, ela falha
+dizendo que NÃO rodou — nunca finge que passou.
 
 ## Deploy
 

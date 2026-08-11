@@ -1020,7 +1020,14 @@ function textoStatus(estado) {
   if (estado.sinal && estado.sinal.mudo) {
     return "Sem sinal há " + duracao(estado.sinal.minutos * 60000);
   }
-  if (estado.emMovimento) return "Em Deslocamento";
+  // "Em Deslocamento" ganhou duração em 10/08/2026, a pedido do dono: o
+  // status sem tempo não responde "há quanto tempo ele está assim?", que
+  // é metade da pergunta de quem olha o painel. `desde` marca o início do
+  // trecho atual, então serve para os dois casos.
+  if (estado.emMovimento) {
+    const ms = estado.desde != null ? Date.now() - estado.desde : null;
+    return ms != null && ms > 0 ? "Em Deslocamento há " + duracao(ms) : "Em Deslocamento";
+  }
   return "Parado há " + duracao(estado.paradoMs);
 }
 
@@ -1257,6 +1264,46 @@ function validar(nome, pontos) {
   return null;
 }
 
+
+/**
+ * Há quanto tempo o ativo está NESTE lugar (CLAUDE.md itens 7 e 8).
+ *
+ * Pedido do dono em 10/08/2026, junto com a duração do status. São duas
+ * perguntas diferentes e o painel só respondia uma:
+ *
+ *   - status  : há quanto tempo está PARADO (ou em deslocamento);
+ *   - lugar   : há quanto tempo está NESTA localidade.
+ *
+ * Elas divergem no caso que mais interessa no pátio: uma locomotiva que
+ * manobra dentro da mesma cerca sai de "parado" várias vezes sem nunca
+ * sair do lugar. Pelo status ela está parada há 4 minutos; pelo lugar,
+ * está no Pátio há três horas. Quem cobra tempo de ativo quer o segundo
+ * número, e ele não existia.
+ *
+ * A conta anda de trás para frente pelas leituras boas enquanto o nome do
+ * lugar não muda, e devolve quanto tempo faz desde a primeira leitura
+ * desse trecho.
+ *
+ * Fora de cerca o nome é a coordenada, que muda a cada tremida do GPS —
+ * então ali isto responde praticamente o mesmo que o tempo parado, e é o
+ * comportamento certo: sem cerca, "o lugar" É o ponto onde ele está.
+ */
+function tempoNoLugar(pontos, cercas, agora = Date.now()) {
+  const ps = leiturasBoas(pontos).filter((p) => emMs(p) <= agora);
+  if (!ps.length) return null;
+
+  const atual = nomearLugar(ps[ps.length - 1], cercas);
+  if (atual == null) return null;
+
+  let inicio = emMs(ps[ps.length - 1]);
+  for (let i = ps.length - 1; i >= 0; i--) {
+    if (nomearLugar(ps[i], cercas) !== atual) break;
+    inicio = emMs(ps[i]);
+  }
+  const ms = agora - inicio;
+  return ms > 0 ? ms : 0;
+}
+
 /* NUCLEO:FIM */
 </script>
 
@@ -1292,6 +1339,17 @@ let selecionado = null;   // chave do ativo aberto, ou null
 let instante = null;      // null = agora; número = momento da timeline
 let cercas = [];          // os lugares com nome (item 7)
 let vinculos = [];        // qual loco em qual celular, e quando (CONTEXTO-VTU 5.1)
+/* O carimbo do último dado enviado por aparelho, vindo de `listar_contatos`.
+   NASCE VAZIO, E ISSO É O PONTO. Em 10/08/2026 esta variável não existia:
+   era criada só pela atribuição dentro de `carregarContatos()`, cujo corpo
+   inteiro mora num try/catch silencioso. Com o `listar_contatos` ainda não
+   criado no servidor, a RPC falhava, o catch engolia, a variável nunca
+   nascia — e `estadoDe()` estourava ReferenceError a cada pintura. O painel
+   ficou sem um único pin, em produção, sem nenhuma mensagem de erro.
+   Declarada aqui, o servidor sem a função vira o que o comentário de
+   `carregarContatos` sempre prometeu: o painel perde o refinamento do sinal
+   e continua de pé. */
+let contatoDe = new Map();
 let desenhando = null;    // vértices da cerca em construção, ou null
 let mapa, pins = new Map(), camadaRota = null, camadaCercas = null, enquadrado = false;
 
@@ -1344,6 +1402,35 @@ async function carregarAparelhos() {
   const lista = (await rpc("listar_dispositivos",
     { p_nome: acesso.nome, p_senha: acesso.senha })) || [];
   return lista.map(function (d) { d.grupo = acesso.nome; return d; });
+}
+
+/**
+ * O carimbo do último dado enviado por cada aparelho.
+ *
+ * Não baixa o bruto — pede ao banco só o `max(hora)` por aparelho, uma
+ * linha cada. Baixar as ~2.880 leituras cruas diárias estouraria o teto de
+ * 10.000 da consulta e encolheria a timeline sem avisar.
+ *
+ * Tolerante a falha de propósito: se `listar_contatos` ainda não existe no
+ * servidor (o SQL pode não ter sido colado), o painel segue funcionando
+ * como antes, com o sinal calculado sobre a posição. Perder o refinamento
+ * é aceitável; derrubar a tela por causa de script pendente, não.
+ */
+async function carregarContatos() {
+  try {
+    const lista = acesso.tipo === "familia"
+      ? await rpc("listar_contatos_familia", { p_nome: acesso.nome, p_senha: acesso.senha })
+      : await rpc("listar_contatos", { p_nome: acesso.nome, p_senha: acesso.senha });
+    const mapa = new Map();
+    (lista || []).forEach(function (c) {
+      const grupo = acesso.tipo === "familia" ? c.grupo : acesso.nome;
+      const ms = Date.parse(c.ultimo_contato);
+      if (Number.isFinite(ms)) mapa.set(grupo + "\u0000" + c.dispositivo, ms);
+    });
+    contatoDe = mapa;
+  } catch (e) {
+    // Silencioso: ver comentário acima.
+  }
 }
 
 function carregarPontos(grupo, dispositivo, horas) {
@@ -1462,7 +1549,41 @@ function janelaDe(chave, horas) {
   });
 }
 
-const estadoDe = (chave) => estadoAtual(historico.get(chave) || [], relogioAtual());
+/**
+ * O estado do ativo, com o sinal corrigido pelo último dado enviado.
+ *
+ * `estadoAtual` calcula o sinal sobre os pontos que o painel baixou — e
+ * esses excluem a leitura crua. Com a loco parada, isso fazia um aparelho
+ * saudável parecer calado por até 10 minutos, e bastava um ponto de vida
+ * atrasar para o painel gritar "sem sinal" sem motivo (os limiares do item
+ * 3 são 12 e 15 min).
+ *
+ * O carimbo do servidor é a evidência melhor: ele enxerga também o que o
+ * painel não baixa. Só substitui quando é MAIS RECENTE — na timeline
+ * arrastada para o passado, o contato de agora não pode contaminar o
+ * estado daquele instante.
+ */
+/** O horário da última POSIÇÃO recebida — sem contar leitura crua. */
+function ultimaPosicaoMs(chave) {
+  const pts = historico.get(chave) || [];
+  let maior = null;
+  for (const p of pts) {
+    const t = emMs(p);
+    if (t != null && (maior == null || t > maior)) maior = t;
+  }
+  return maior;
+}
+
+function estadoDe(chave) {
+  const estado = estadoAtual(historico.get(chave) || [], relogioAtual());
+  const contato = contatoDe.get(chave);
+  const agora = relogioAtual();
+  if (contato != null && contato <= agora && contato > (estado.ultimoContatoMs ?? 0)) {
+    estado.ultimoContatoMs = contato;
+    estado.sinal = calcularSinal(contato, agora);
+  }
+  return estado;
+}
 
 /* ---------------- utilidades de texto ---------------- */
 
@@ -1741,6 +1862,7 @@ async function buscar() {
   try {
     aparelhos = await carregarAparelhos();
     await atualizarHistorico();
+    await carregarContatos();
     ultimoContatoServidor = Date.now();
     falhaAtual = null;
     faixa(null);
@@ -2038,6 +2160,7 @@ function desenharDetalhe(c) {
       '<div class="linha-campo"><span class="rot">Localidade</span><span class="val lc"></span></div>' +
       '<div class="linha-campo"><span class="rot">Sinal</span><span class="val sn"></span></div>' +
       '<div class="linha-campo"><span class="rot">Última posição</span><span class="val up"></span></div>' +
+      '<div class="linha-campo"><span class="rot">Último dado</span><span class="val ud"></span></div>' +
       '<div class="linha-campo"><span class="rot">Locomotiva</span><span class="val lo"></span></div>' +
     "</div>" +
     '<div class="vinc-barra" style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"></div>' +
@@ -2055,11 +2178,30 @@ function desenharDetalhe(c) {
   caixa.querySelector(".kicker").textContent = grupo + " · aparelho " + aparelho;
   caixa.querySelector(".st").textContent = textoStatus(e);
   caixa.querySelector(".st").style.color = COR_FAROL[e.farol] || "";
-  caixa.querySelector(".lc").textContent = lugarDe(e.posicao);
+  /* A localidade ganha "há quanto tempo NESTE lugar", que é pergunta
+     diferente de "há quanto tempo parado". No pátio a loco manobra e
+     estaciona várias vezes sem sair da cerca: pelo status ela está parada
+     há 20 min, pelo lugar está no Pátio há 3 h. Quem mede ocupação de
+     ativo quer o segundo número. */
+  const noLugar = tempoNoLugar(historico.get(selecionado) || [], cercas, fim);
+  caixa.querySelector(".lc").textContent =
+    lugarDe(e.posicao) + (noLugar ? " · há " + duracao(noLugar) : "");
   caixa.querySelector(".sn").innerHTML = ondas(s.barras) + " " +
     escapar(s.mudo ? "sem sinal há " + duracao(s.minutos * 60000)
       : s.nivel === "fraco" ? "fraco" : "bom");
-  caixa.querySelector(".up").textContent = e.ultimoContatoMs
+  /* Dois campos, e a diferença entre eles é o ponto todo.
+     "Última posição" é quando o aparelho mandou uma posição de verdade —
+     com a loco parada, isso acontece de 10 em 10 min (item 2), então esse
+     carimbo fica velho SEM que nada esteja errado.
+     "Último dado" é a última notícia de qualquer tipo, inclusive a leitura
+     crua de 30 em 30 s. É a prova de que o aparelho está vivo agora.
+     Antes havia só o primeiro, e ele significava as duas coisas opostas:
+     parado e saudável, ou morto há dez minutos. */
+  const ultimaPos = ultimaPosicaoMs(selecionado);
+  caixa.querySelector(".up").textContent = ultimaPos
+    ? relogioMs(ultimaPos) + " (" + duracao(fim - ultimaPos) + ")"
+    : "—";
+  caixa.querySelector(".ud").textContent = e.ultimoContatoMs
     ? relogioMs(e.ultimoContatoMs) + " (" + duracao(fim - e.ultimoContatoMs) + ")"
     : "—";
   caixa.querySelector(".lo").textContent = loco || "sem vínculo";
