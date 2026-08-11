@@ -2026,12 +2026,23 @@ function desenharPins() {
 
   aparelhos.forEach((a) => {
     const chave = chaveDe(a);
-    /* Sem loco atrelada não vira pin. A exceção é o escolhido: quem clicou
-       nele na lista "Aguarda loco" está pedindo para ver o histórico, e
-       trilha sem pin na ponta parece defeito, não decisão. */
-    if (aguardandoLoco(chave) && selecionado !== chave) return;
     const estado = estadoDe(chave);
     if (!estado.posicao) return;
+    /* Sem loco atrelada não vira pin — mas com DUAS exceções, e a segunda é
+       regra de contexto, não capricho.
+
+       A primeira é o escolhido: quem clicou nele na lista "Aguarda loco"
+       está pedindo para ver o histórico, e trilha sem pin na ponta parece
+       defeito, não decisão.
+
+       A segunda: aparelho sem vínculo que está EM MOVIMENTO continua no
+       mapa. Celular guardado na gaveta fica parado; o que anda está dentro
+       de uma loco trabalhando, e o que falta nele é cadastro, não operação.
+       Deixar esse sumir seria esconder um ativo em serviço por causa de um
+       esquecimento de vínculo — exatamente o que o CONTEXTO-VTU 2 proíbe:
+       "errar para o lado de sinalizar é aceitável; deixar passar em
+       silêncio, não". */
+    if (aguardandoLoco(chave) && !estado.emMovimento && selecionado !== chave) return;
     vivos.add(chave);
 
     const onde = [estado.posicao.lat, estado.posicao.lng];
@@ -2122,15 +2133,23 @@ function desenharPainelLateral() {
      aguarda loco, o status vira o próprio "Aguarda loco": parado/andando é
      resposta para uma pergunta que ninguém faz sobre celular que não está
      atrelado a nada. O resto da linha continua igual — lugar e hora da
-     última posição — porque é justamente o que não pode se perder. */
+     última posição — porque é justamente o que não pode se perder.
+
+     A exceção é o aparelho sem vínculo que está EM MOVIMENTO: esse não é
+     inventário, é loco trabalhando com cadastro faltando. Ele fica em cor de
+     alerta e diz o que está errado, em vez de descer calado para o fim da
+     lista (CONTEXTO-VTU 2). */
   const montarItem = (a, esperando) => {
     const chave = chaveDe(a);
     const e = estadoDe(chave);
+    const semVinculoAndando = esperando && e.emMovimento;
     const d = document.createElement("div");
     d.className = "item";
     d.innerHTML =
       '<span class="bola" style="background:' +
-        (esperando ? "var(--parado)" : (COR_FAROL[e.farol] || "var(--parado)")) + '"></span>' +
+        (semVinculoAndando ? "var(--morno)"
+          : esperando ? "var(--parado)"
+          : (COR_FAROL[e.farol] || "var(--parado)")) + '"></span>' +
       '<div class="corpo">' +
         '<div class="nome"><span class="n"></span>' +
           '<span class="' + (e.sinal.mudo ? "mudo" : "") + '">' + ondas(e.sinal.barras) + "</span>" +
@@ -2141,7 +2160,10 @@ function desenharPainelLateral() {
     // O prefixo da loco, não o nome do celular (CONTEXTO-VTU 5.1). Sem
     // vínculo cadastrado, cai no nome do aparelho — a tela diz o que sabe.
     d.querySelector(".n").textContent = rotuloDe(chave);
-    d.querySelector(".st").textContent = esperando ? "Aguarda loco" : textoStatus(e);
+    d.querySelector(".st").textContent = semVinculoAndando
+      ? "Sem vínculo · " + textoStatus(e)
+      : esperando ? "Aguarda loco" : textoStatus(e);
+    if (semVinculoAndando) d.querySelector(".st").style.color = "var(--morno)";
     d.querySelector(".lc").textContent = lugarDe(e.posicao) +
       " · última posição " + relogioMs(e.ultimoContatoMs);
     d.onclick = () => { selecionado = chave; enquadrado = false; pintarTudo(); };
