@@ -1339,6 +1339,17 @@ let selecionado = null;   // chave do ativo aberto, ou null
 let instante = null;      // null = agora; número = momento da timeline
 let cercas = [];          // os lugares com nome (item 7)
 let vinculos = [];        // qual loco em qual celular, e quando (CONTEXTO-VTU 5.1)
+/* O carimbo do último dado enviado por aparelho, vindo de `listar_contatos`.
+   NASCE VAZIO, E ISSO É O PONTO. Em 10/08/2026 esta variável não existia:
+   era criada só pela atribuição dentro de `carregarContatos()`, cujo corpo
+   inteiro mora num try/catch silencioso. Com o `listar_contatos` ainda não
+   criado no servidor, a RPC falhava, o catch engolia, a variável nunca
+   nascia — e `estadoDe()` estourava ReferenceError a cada pintura. O painel
+   ficou sem um único pin, em produção, sem nenhuma mensagem de erro.
+   Declarada aqui, o servidor sem a função vira o que o comentário de
+   `carregarContatos` sempre prometeu: o painel perde o refinamento do sinal
+   e continua de pé. */
+let contatoDe = new Map();
 let desenhando = null;    // vértices da cerca em construção, ou null
 let mapa, pins = new Map(), camadaRota = null, camadaCercas = null, enquadrado = false;
 
