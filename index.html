@@ -1510,6 +1510,22 @@ const fecharVinculo = (id) =>
 const rotuloDe = (chave) =>
   rotuloAtivo(vinculos, grupoDe(chave), nomeDe(chave), relogioAtual());
 
+/* Celular sem loco atrelada no instante mostrado: sai do mapa e vai para a
+   lista "Aguarda loco". O pátio rastreia locomotiva, não aparelho — celular
+   na gaveta virando pin é ruído em cima da única tela que o pessoal olha.
+   Nada é apagado: os pontos continuam no banco, o aparelho continua clicável
+   e, como a conta usa `relogioAtual()`, arrastar a timeline para antes de
+   desatrelar traz ele de volta ao mapa com a loco que era dele na hora.
+   O `vinculos.length` guarda a porta DE PROPÓSITO: sem NENHUM vínculo
+   cadastrado — servidor ainda sem `listar_vinculos`, ou `sql/vtu.sql` não
+   colado no painel — todo aparelho pareceria estar aguardando e o monitor
+   abriria com o mapa vazio. Seria o 10/08/2026 outra vez, e outra vez sem
+   nenhum erro na tela. Sem vínculo nenhum o conceito ainda não existe nesta
+   instalação, e o painel segue exatamente como sempre foi. */
+const aguardandoLoco = (chave) =>
+  vinculos.length > 0 &&
+  !temLoco(vinculos, grupoDe(chave), nomeDe(chave), relogioAtual());
+
 /* ---------------- histórico guardado no navegador ----------------
    O servidor só sabe devolver "as últimas N horas". Baixar os 7 dias de
    todos os aparelhos a cada 15 segundos seria absurdo, então cada ativo
@@ -1985,9 +2001,15 @@ function prepararModoParede() {
 /* ---------------- desenho ---------------- */
 
 function pintarTudo() {
-  el("cab-titulo").textContent = aparelhos.length
-    ? aparelhos.length + (aparelhos.length === 1 ? " ativo" : " ativos")
-    : "Nenhum aparelho ainda";
+  /* A conta do cabeçalho passa a ser a do MAPA, não a do inventário: quem
+     aguarda loco não é ativo em operação, e somar os dois dava um número
+     que não batia com os pins na tela. */
+  const esperando = aparelhos.filter((a) => aguardandoLoco(chaveDe(a))).length;
+  const emLoco = aparelhos.length - esperando;
+  el("cab-titulo").textContent = !aparelhos.length
+    ? "Nenhum aparelho ainda"
+    : emLoco + (emLoco === 1 ? " ativo" : " ativos") +
+      (esperando ? " · " + esperando + " aguardando loco" : "");
   desenharPins();
   desenharRota();
   desenharPainelLateral();
@@ -2004,6 +2026,10 @@ function desenharPins() {
 
   aparelhos.forEach((a) => {
     const chave = chaveDe(a);
+    /* Sem loco atrelada não vira pin. A exceção é o escolhido: quem clicou
+       nele na lista "Aguarda loco" está pedindo para ver o histórico, e
+       trilha sem pin na ponta parece defeito, não decisão. */
+    if (aguardandoLoco(chave) && selecionado !== chave) return;
     const estado = estadoDe(chave);
     if (!estado.posicao) return;
     vivos.add(chave);
@@ -2092,8 +2118,41 @@ function desenharPainelLateral() {
   }
   if (selecionado) { desenharDetalhe(c); return; }
 
+  /* O item é o mesmo nos dois blocos, então nasce aqui uma vez só. Para quem
+     aguarda loco, o status vira o próprio "Aguarda loco": parado/andando é
+     resposta para uma pergunta que ninguém faz sobre celular que não está
+     atrelado a nada. O resto da linha continua igual — lugar e hora da
+     última posição — porque é justamente o que não pode se perder. */
+  const montarItem = (a, esperando) => {
+    const chave = chaveDe(a);
+    const e = estadoDe(chave);
+    const d = document.createElement("div");
+    d.className = "item";
+    d.innerHTML =
+      '<span class="bola" style="background:' +
+        (esperando ? "var(--parado)" : (COR_FAROL[e.farol] || "var(--parado)")) + '"></span>' +
+      '<div class="corpo">' +
+        '<div class="nome"><span class="n"></span>' +
+          '<span class="' + (e.sinal.mudo ? "mudo" : "") + '">' + ondas(e.sinal.barras) + "</span>" +
+        "</div>" +
+        '<div class="campo"><b class="st"></b></div>' +
+        '<div class="campo lc"></div>' +
+      "</div>";
+    // O prefixo da loco, não o nome do celular (CONTEXTO-VTU 5.1). Sem
+    // vínculo cadastrado, cai no nome do aparelho — a tela diz o que sabe.
+    d.querySelector(".n").textContent = rotuloDe(chave);
+    d.querySelector(".st").textContent = esperando ? "Aguarda loco" : textoStatus(e);
+    d.querySelector(".lc").textContent = lugarDe(e.posicao) +
+      " · última posição " + relogioMs(e.ultimoContatoMs);
+    d.onclick = () => { selecionado = chave; enquadrado = false; pintarTudo(); };
+    return d;
+  };
+
+  const esperando = aparelhos.filter((a) => aguardandoLoco(chaveDe(a)));
+  const emLoco = aparelhos.filter((a) => !aguardandoLoco(chaveDe(a)));
+
   const grupos = [];
-  aparelhos.forEach((a) => { if (grupos.indexOf(a.grupo) < 0) grupos.push(a.grupo); });
+  emLoco.forEach((a) => { if (grupos.indexOf(a.grupo) < 0) grupos.push(a.grupo); });
 
   grupos.forEach((g) => {
     const t = document.createElement("div");
@@ -2101,30 +2160,19 @@ function desenharPainelLateral() {
     t.textContent = g;
     c.appendChild(t);
 
-    aparelhos.filter((a) => a.grupo === g).forEach((a) => {
-      const chave = chaveDe(a);
-      const e = estadoDe(chave);
-      const d = document.createElement("div");
-      d.className = "item";
-      d.innerHTML =
-        '<span class="bola" style="background:' + (COR_FAROL[e.farol] || "var(--parado)") + '"></span>' +
-        '<div class="corpo">' +
-          '<div class="nome"><span class="n"></span>' +
-            '<span class="' + (e.sinal.mudo ? "mudo" : "") + '">' + ondas(e.sinal.barras) + "</span>" +
-          "</div>" +
-          '<div class="campo"><b class="st"></b></div>' +
-          '<div class="campo lc"></div>' +
-        "</div>";
-      // O prefixo da loco, não o nome do celular (CONTEXTO-VTU 5.1). Sem
-      // vínculo cadastrado, cai no nome do aparelho — a tela diz o que sabe.
-      d.querySelector(".n").textContent = rotuloDe(chave);
-      d.querySelector(".st").textContent = textoStatus(e);
-      d.querySelector(".lc").textContent = lugarDe(e.posicao) +
-        " · última posição " + relogioMs(e.ultimoContatoMs);
-      d.onclick = () => { selecionado = chave; enquadrado = false; pintarTudo(); };
-      c.appendChild(d);
-    });
+    emLoco.filter((a) => a.grupo === g).forEach((a) => c.appendChild(montarItem(a, false)));
   });
+
+  /* A lista separada vem sempre por último: é inventário parado, não
+     operação. E só aparece quando tem alguém nela — seção vazia é ruído
+     permanente numa tela que fica ligada o dia inteiro. */
+  if (esperando.length) {
+    const t = document.createElement("div");
+    t.className = "secao";
+    t.textContent = "Aguarda loco";
+    c.appendChild(t);
+    esperando.forEach((a) => c.appendChild(montarItem(a, true)));
+  }
 }
 
 function desenharDetalhe(c) {
