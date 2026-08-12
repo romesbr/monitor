@@ -1647,15 +1647,30 @@ function janelaDe(chave, horas) {
  * arrastada para o passado, o contato de agora não pode contaminar o
  * estado daquele instante.
  */
-/** O horário da última POSIÇÃO recebida — sem contar leitura crua. */
+/**
+ * O horário da última posição que REALMENTE MOVEU O PIN.
+ *
+ * Antes esta função pegava o carimbo mais novo do histórico, qualquer que
+ * fosse a precisão. O pin, não: `estadoAtual` só olha `leiturasBoas`, que
+ * corta acima de PRECISAO_MAX (50 m). Duas respostas diferentes para a mesma
+ * leitura, e o painel mostrava a otimista ao lado de um mapa desatualizado.
+ *
+ * Foi o defeito relatado em 12/08/2026 ("diz que puxou o dado recente mas
+ * está errada no mapa"). Medido nos pontos reais do CEL Leo: o painel dizia
+ * "Última posição 20:38 (5min)" e o pin estava no ponto das 17:49 — 833 m de
+ * distância. O aparelho estava vivo e falando, mas havia horas que só mandava
+ * posição grosseira (100 m, sempre as mesmas coordenadas: é a rede de
+ * celular respondendo, não o GPS). Boa para provar que ele está vivo, inútil
+ * para dizer onde ele está.
+ *
+ * Agora o carimbo usa o MESMO corte do pin. Quando o GPS está dormindo, o
+ * painel passa a dizer a verdade — "Última posição 17:49 (2h55)" junto de
+ * "Último dado agora" — em vez de esconder três horas de mapa parado atrás
+ * de um horário fresco (CONTEXTO-VTU 5.3).
+ */
 function ultimaPosicaoMs(chave) {
-  const pts = historico.get(chave) || [];
-  let maior = null;
-  for (const p of pts) {
-    const t = emMs(p);
-    if (t != null && (maior == null || t > maior)) maior = t;
-  }
-  return maior;
+  const boas = leiturasBoas(historico.get(chave) || []);
+  return boas.length ? emMs(boas[boas.length - 1]) : null;
 }
 
 function estadoDe(chave) {
@@ -2316,6 +2331,7 @@ function desenharDetalhe(c) {
       '<div class="linha-campo"><span class="rot">Último dado</span><span class="val ud"></span></div>' +
       '<div class="linha-campo"><span class="rot">Locomotiva</span><span class="val lo"></span></div>' +
     "</div>" +
+    '<div class="gps" style="font-size:12px;color:var(--morno);line-height:1.5;margin-top:8px"></div>' +
     '<div class="vinc-barra" style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"></div>' +
     '<div class="secao">Onde ficou nas últimas ' + HORAS_ROTA + " h</div>" +
     '<div class="cob" style="font-size:12px;color:var(--suave);line-height:1.5;margin-bottom:6px"></div>' +
@@ -2351,9 +2367,27 @@ function desenharDetalhe(c) {
      Antes havia só o primeiro, e ele significava as duas coisas opostas:
      parado e saudável, ou morto há dez minutos. */
   const ultimaPos = ultimaPosicaoMs(selecionado);
-  caixa.querySelector(".up").textContent = ultimaPos
+  const alvoUp = caixa.querySelector(".up");
+  alvoUp.textContent = ultimaPos
     ? relogioMs(ultimaPos) + " (" + duracao(fim - ultimaPos) + ")"
     : "—";
+  /* Aparelho falando e sem saber onde está: o caso do CEL Leo em 12/08/2026.
+     Sinal cheio, "último dado" de segundos atrás, e o pin três horas atrasado
+     porque só chegava posição grosseira. Nenhum dos campos mentia sozinho —
+     era preciso comparar os dois para desconfiar, e ninguém compara.
+     GPS_MUDO_MS é generoso de propósito: parado, a posição vem de 10 em 10
+     min (item 2), então só depois de perder três dessas é que há o que dizer. */
+  const GPS_MUDO_MS = 35 * 60 * 1000;
+  const semGps =
+    ultimaPos != null && e.ultimoContatoMs != null &&
+    e.ultimoContatoMs - ultimaPos >= GPS_MUDO_MS;
+  alvoUp.style.color = semGps ? "var(--morno)" : "";
+  const alvoGps = caixa.querySelector(".gps");
+  alvoGps.textContent = semGps
+    ? "O aparelho está enviando dados, mas sem posição confiável há " +
+      duracao(fim - ultimaPos) + ". O pin está no último lugar conhecido, " +
+      "não onde ele está agora."
+    : "";
   caixa.querySelector(".ud").textContent = e.ultimoContatoMs
     ? relogioMs(e.ultimoContatoMs) + " (" + duracao(fim - e.ultimoContatoMs) + ")"
     : "—";
