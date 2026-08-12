@@ -711,6 +711,9 @@ function deslocamentoMs(ms) {
  */
 
 
+
+
+
 const MOVIMENTO_SUSTENTADO_MS = 60 * 1000; // item 4: 60 s fora do raio
 const FAROL_AMARELO_MIN = 15;
 const FAROL_VERMELHO_MIN = 25;
@@ -738,6 +741,7 @@ function calcularTrechos(pontos, opcoes = {}) {
   const {
     raio = RAIO_PARADA,
     movimentoSustentadoMs = MOVIMENTO_SUSTENTADO_MS,
+    silencioMs = SINAL_MUDO_MIN * 60000,
     precisaoMax,
     agora,
   } = opcoes;
@@ -754,6 +758,49 @@ function calcularTrechos(pontos, opcoes = {}) {
   for (let i = 1; i < ps.length; i++) {
     const p = ps[i];
     const t = emMs(p);
+
+    /* Buraco de silêncio: fecha o que estava aberto e recomeça deste ponto.
+       Esta função enxergava só DISTÂNCIA, nunca o tempo entre uma leitura e
+       a seguinte. Com isso, um aparelho que sumia por horas e voltava longe
+       parecia ter feito um único deslocamento contínuo desde antes de sumir.
+
+       Reportado em campo em 12/08/2026: a loco 2604 mostrava "Em
+       Deslocamento há 65h45" com "último dado há 5 min" e sinal BOM. O
+       aparelho ficara mudo ~65 h e voltara, e o silêncio virou movimento.
+
+       `estadoAtual` já tinha um guarda para isto (`!sinal.mudo`), mas ele só
+       cobre quem AINDA está calado. No instante em que o aparelho volta a
+       falar, o trecho velho ressuscita — que é exatamente o caso relatado.
+
+       Nada se inventa no lugar do buraco: o que estava aberto fecha na última
+       leitura conhecida, e o ponto seguinte começa uma parada nova, do mesmo
+       jeito que o primeiro ponto do histórico começa. Tempo que ninguém
+       observou não vira parada nem movimento — vira nada, e quem responde por
+       ele é `cobertura()`, que mede o buraco de propósito.
+
+       Isso importa além da tela: `resumoPorLugar` soma estes trechos, e o
+       CONTEXTO-VTU 2 é explícito em que silêncio não pode virar número a favor
+       de quem cobra. 65 h de "deslocamento" que nunca houve seriam destruídas
+       no primeiro questionamento, junto com o resto do relatório.
+
+       O corte usa as leituras BOAS, não todo contato: se não houve posição
+       confiável no período, não dá para afirmar onde a máquina esteve, e é
+       disso que o trecho trata. Sinal é outra pergunta e tem função própria. */
+    if (t - emMs(ps[i - 1]) >= silencioMs) {
+      if (parada) {
+        trechos.push({ ...parada, tipo: "parada" });
+      } else {
+        trechos.push({
+          tipo: "movimento",
+          inicio: movimento.inicio,
+          fim: emMs(movimento.anterior),
+        });
+      }
+      parada = { ancora: p, inicio: t, fim: t };
+      movimento = null;
+      suspeita = null;
+      continue;
+    }
 
     if (parada) {
       if (distancia(parada.ancora, p) <= raio) {
@@ -1075,6 +1122,9 @@ function resumoPorLugar(trechos, nomear = coordenada) {
  */
 
 
+
+
+
 /** Todos os vínculos daquele aparelho, do mais novo para o mais velho. */
 function vinculosDe(vinculos, grupo, dispositivo) {
   return (vinculos || [])
@@ -1161,6 +1211,9 @@ function abertoDoPrefixo(vinculos, prefixo) {
  * A cerca pertence à família e vale para todos os grupos dela — quem carrega
  * a lista é quem sabe disso; aqui elas chegam prontas.
  */
+
+
+
 
 
 /**
@@ -1288,6 +1341,9 @@ function validar(nome, pontos) {
  * então ali isto responde praticamente o mesmo que o tempo parado, e é o
  * comportamento certo: sem cerca, "o lugar" É o ponto onde ele está.
  */
+/* Mesmo prazo do sinal (item 3): 15 min sem notícia é buraco, não permanência. */
+const SILENCIO_LUGAR_MS = 15 * 60000;
+
 function tempoNoLugar(pontos, cercas, agora = Date.now()) {
   const ps = leiturasBoas(pontos).filter((p) => emMs(p) <= agora);
   if (!ps.length) return null;
@@ -1295,9 +1351,21 @@ function tempoNoLugar(pontos, cercas, agora = Date.now()) {
   const atual = nomearLugar(ps[ps.length - 1], cercas);
   if (atual == null) return null;
 
+  /* O passo para trás para no primeiro BURACO DE SILÊNCIO, pelo mesmo motivo
+     que `calcularTrechos` quebra o trecho: enquanto o aparelho esteve mudo,
+     ninguém sabe se ele ficou onde estava ou deu a volta ao pátio e voltou.
+     Sem esta parada, um celular que sumiu 65 h e voltou no mesmo lugar dizia
+     "aqui há 65h35" — foi o que apareceu no campo Localidade em 12/08/2026,
+     ao lado do "Em Deslocamento há 65h45" que veio do mesmo defeito.
+
+     O número aqui responde "há quanto tempo NESTE lugar", e é ele que vira
+     ocupação de ativo. Contar silêncio como permanência infla exatamente o
+     número que o CONTEXTO-VTU 2 manda não inflar. */
+  const silencioMs = SILENCIO_LUGAR_MS;
   let inicio = emMs(ps[ps.length - 1]);
   for (let i = ps.length - 1; i >= 0; i--) {
     if (nomearLugar(ps[i], cercas) !== atual) break;
+    if (i < ps.length - 1 && emMs(ps[i + 1]) - emMs(ps[i]) >= silencioMs) break;
     inicio = emMs(ps[i]);
   }
   const ms = agora - inicio;
