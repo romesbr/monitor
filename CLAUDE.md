@@ -163,9 +163,22 @@ português.
 porque não há build nem tela de teste separada: um push errado em `main` fica
 no ar imediatamente para quem estiver olhando o painel. Um branch por passo.
 Commite a cada mudança coerente, mensagem em português dizendo **o que
-mudou e por quê**. Ao terminar, avise e pare — o merge só acontece depois que
-o dono confirmar que testou (abrir o site e olhar o mapa, não só checar que
-carregou).
+mudou e por quê**.
+
+**O merge é seu, não dele** (decidido pelo dono em 11/08/2026, substituindo a
+regra anterior, que exigia ele confirmar ter testado o site antes). Terminou e
+passou nas provas? Mergeia — nada de branch de pé esperando autorização.
+
+Aqui isso pesa mais que no app, porque **merge é publicação imediata**: em
+menos de um minuto está no ar para quem estiver olhando o painel. Por isso as
+duas obrigações que substituem o portão humano:
+
+- **`node ferramentas/render.js` antes de todo merge**, sem exceção. É a única
+  prova que abre a página de verdade; `conferir.js` e `prova.js` passam com
+  folga num `index.html` que não pinta nada. Sem o portão do dono, essa prova
+  é a única rede que sobrou.
+- **Dizer na resposta o que mudou na tela dele.** Ele descobre a mudança
+  abrindo o painel, não lendo o diff.
 
 Toda resposta termina com um resumo curto separando o que está decidido do
 que depende dele: decisão pendente, comando para rodar, ou coisa que ficou
