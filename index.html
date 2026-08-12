@@ -2160,10 +2160,25 @@ function desenharRota() {
     L.polyline(t.trilha.map((p) => [p.lat, p.lng]),
       { color: "#16202B", weight: 3, opacity: .55, lineJoin: "round" }).addTo(camadaRota);
     // marcosDeDistancia vem do núcleo: é a mesma conta que o app faz.
+    /* Setinha apontada para onde o aparelho ia, e não um pontinho cego.
+       Num pátio de manobra é ela que diz se a loco foi ou voltou pelo MESMO
+       trilho — dois marcos redondos no mesmo lugar contam a mesma história
+       para ida e para volta, e é justamente essa diferença que interessa a
+       quem mede ocupação.
+
+       O `rumo` (graus, 0 = norte) já vinha pronto do núcleo desde sempre, e
+       o site nunca o usou: os marcos eram `circleMarker`. O app já desenhava
+       a seta na tela dele (`src/TelaMonitor.js`), então aqui é o mesmo
+       desenho, para as duas telas contarem a mesma coisa do mesmo jeito. */
     marcosDeDistancia(t.trilha).forEach((m) => {
-      L.circleMarker([m.lat, m.lng], {
-        radius: 3.5, color: "#16202B", weight: 1.5, fillColor: "#fff", fillOpacity: 1
-      }).bindTooltip(
+      const icone = L.divIcon({
+        className: "", iconSize: [14, 14], iconAnchor: [7, 7],
+        html: '<div style="width:14px;height:14px;transform:rotate(' + m.rumo + 'deg)">' +
+              '<svg width="14" height="14" viewBox="0 0 14 14">' +
+              '<path d="M7 1 L12 12 L7 9.3 L2 12 Z" fill="#16202B" stroke="#fff" stroke-width="1"/>' +
+              "</svg></div>",
+      });
+      L.marker([m.lat, m.lng], { icon: icone }).bindTooltip(
         '<span class="marco">' + relogio(m.hora) + " · " + (m.metros / 1000).toFixed(1) + " km</span>",
         { direction: "top", className: "balao", opacity: 1 }
       ).addTo(camadaRota);
