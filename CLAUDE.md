@@ -12,6 +12,9 @@ lá, não aqui:**
   modelo de segurança, mapa do código do app.
 - `CONTEXTO-VTU.md` do `rastreio` — para que o projeto existe (pátio de
   manobras da VLI em Vitória) e a natureza de piloto da infraestrutura.
+- `BACKLOG.md` do `rastreio` — o que já está decidido que existe e ainda não
+  foi feito, incluindo os itens que são deste site. Antes de propor trabalho
+  novo aqui, veja se ele já está lá com o diagnóstico pronto.
 
 Leia os três antes de propor qualquer mudança aqui. Uma alteração que faz
 sentido olhando só este arquivo pode contradizer uma decisão de produto que
