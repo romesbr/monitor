@@ -1409,7 +1409,22 @@ function tempoNoLugar(pontos, cercas, agora = Date.now()) {
     if (i < ps.length - 1 && emMs(ps[i + 1]) - emMs(ps[i]) >= silencioMs) break;
     inicio = emMs(ps[i]);
   }
-  const ms = agora - inicio;
+  /* O buraco do FIM conta igual ao do meio, e este passou batido em 12/08.
+     O laço acima para no silêncio entre duas leituras, mas o relógio seguia
+     correndo até `agora` — e o último silêncio, o que vai da última notícia
+     até este instante, nunca era testado.
+
+     No Cel li, calado desde 09/08, o painel dizia "Localidade · há 84h09":
+     84 horas de aparelho desligado apresentadas como 84 horas parado ali. O
+     número não é grande demais, é inventado — ninguém viu nada nesse período,
+     e o celular pode ter atravessado o pátio inteiro nesse tempo.
+
+     Com o aparelho mudo, a permanência que se pode afirmar termina na última
+     leitura. Se ela for só uma, o tempo observado é zero, e o site deixa de
+     escrever a duração em vez de escrever uma falsa. */
+  const ultimo = emMs(ps[ps.length - 1]);
+  const fim = agora - ultimo >= silencioMs ? ultimo : agora;
+  const ms = fim - inicio;
   return ms > 0 ? ms : 0;
 }
 
@@ -2447,10 +2462,22 @@ function desenharDetalhe(c) {
      porque só chegava posição grosseira. Nenhum dos campos mentia sozinho —
      era preciso comparar os dois para desconfiar, e ninguém compara.
      GPS_MUDO_MS é generoso de propósito: parado, a posição vem de 10 em 10
-     min (item 2), então só depois de perder três dessas é que há o que dizer. */
+     min (item 2), então só depois de perder três dessas é que há o que dizer.
+
+     O `!s.mudo` é o conserto do dia 13/08/2026, e o defeito era meu: sem ele o
+     aviso saía também para aparelho DESLIGADO. No Cel li, calado desde a
+     véspera, o painel mostrava "sem sinal há 16h55" e logo abaixo "o aparelho
+     está enviando dados" — duas linhas coladas dizendo o contrário uma da
+     outra. A conta olhava só a distância entre os dois carimbos, e num
+     aparelho morto os dois são velhos: a diferença continua lá, e o aviso
+     disparava do mesmo jeito.
+
+     A frase só faz sentido para quem está falando AGORA e mesmo assim não
+     sabe onde está. Sem sinal, quem explica é a linha "sem sinal há tanto", e
+     este aviso vira mentira em cima dela. */
   const GPS_MUDO_MS = 35 * 60 * 1000;
   const semGps =
-    ultimaPos != null && e.ultimoContatoMs != null &&
+    !s.mudo && ultimaPos != null && e.ultimoContatoMs != null &&
     e.ultimoContatoMs - ultimaPos >= GPS_MUDO_MS;
   alvoUp.style.color = semGps ? "var(--morno)" : "";
   const alvoGps = caixa.querySelector(".gps");
