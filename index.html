@@ -83,6 +83,14 @@ aside{background:var(--cartao);border-right:1px solid var(--linha);overflow-y:au
 .lugar{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0}
 .lugar .nom{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lugar .dur{font-family:'JetBrains Mono',monospace;color:var(--suave);flex:none}
+/* A linha de trechos acompanha a timeline: o trecho que contém o instante
+   arrastado ganha a marca vermelha, e o que vem DEPOIS dele esmaece — assim
+   se lê de bate-olho onde a régua está dentro do dia, sem a lista encolher. */
+.lugar.agora{border-left:3px solid var(--vivo);margin-left:-10px;padding-left:7px;font-weight:600}
+.lugar.agora .dur{color:var(--vivo)}
+.lugar.depois{opacity:.38}
+.lugar .tag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;
+  color:var(--suave);margin-right:6px}
 
 main{position:relative;min-height:0}
 #mapa{height:100%;background:#DFE6ED}
@@ -1679,15 +1687,17 @@ async function atualizarHistorico() {
   await Promise.all(tarefas);
 }
 
-/** Os pontos de um ativo dentro da janela que termina no instante mostrado. */
-function janelaDe(chave, horas) {
-  const fim = relogioAtual();
+/** Os pontos de um ativo numa janela de N horas que termina em `fim`. */
+function janelaAte(chave, horas, fim) {
   const inicio = fim - horas * 3600 * 1000;
   return (historico.get(chave) || []).filter((p) => {
     const t = emMs(p);
     return t >= inicio && t <= fim;
   });
 }
+
+/** Os pontos de um ativo dentro da janela que termina no instante mostrado. */
+const janelaDe = (chave, horas) => janelaAte(chave, horas, relogioAtual());
 
 /**
  * O estado do ativo, com o sinal corrigido pelo último dado enviado.
@@ -2529,20 +2539,55 @@ function desenharDetalhe(c) {
     });
   }
 
+  /* A lista de trechos mostra o PERÍODO INTEIRO, não o pedaço até o instante
+     arrastado — e é essa a diferença que o dono pediu em 13/08/2026.
+
+     Antes ela era recortada junto com o resto do painel: arrastar a régua para
+     as 10h fazia a lista encolher para o que havia até as 10h, e o resto do dia
+     sumia. Dava para ver o instante, não dava para ver o dia.
+
+     Agora o dia fica inteiro na tela e quem se move é uma MARCA: o trecho que
+     contém o instante da régua ganha a barra vermelha, e o que vem depois dele
+     esmaece. Arrastando, a marca desce pela lista e se lê onde a régua está
+     dentro do dia sem perder o contexto do que veio antes e do que vem depois.
+
+     Pin, status e localidade continuam presos ao instante — é para isso que a
+     timeline existe. Só a lista passou a ser âncora em vez de recorte. */
   const alvoTrechos = caixa.querySelector(".trechos");
-  const emOrdem = trechos.slice().reverse();
+  const agoraDeVerdade = Date.now();
+  const trechosDoPeriodo = calcularTrechos(
+    janelaAte(selecionado, HORAS_ROTA, agoraDeVerdade));
+  const emOrdem = trechosDoPeriodo.slice().reverse();
   if (!emOrdem.length) {
     alvoTrechos.innerHTML = '<p class="campo" style="color:var(--suave)">Sem histórico no período.</p>';
   } else {
+    let marcado = null;
     emOrdem.forEach((t) => {
       const d = document.createElement("div");
       d.className = "lugar";
+      // O instante cai DENTRO deste trecho? O primeiro que couber leva a marca:
+      // a lista vem do mais novo para o mais velho, então é o certo.
+      const contem = fim >= t.inicio && fim <= t.fim;
+      if (contem && !marcado) { d.classList.add("agora"); marcado = d; }
+      else if (t.inicio > fim) d.classList.add("depois");
       d.innerHTML = '<span class="nom"></span><span class="dur"></span>';
       d.querySelector(".nom").textContent = relogioMs(t.inicio) + " · " +
         (t.tipo === "parada" ? lugarDe(t.ancora) : "em movimento");
       d.querySelector(".dur").textContent = duracao(t.fim - t.inicio);
       alvoTrechos.appendChild(d);
     });
+    /* Sem trecho que contenha o instante (buraco de silêncio entre dois), a
+       marca vai para o primeiro trecho ANTERIOR a ele: é onde o ativo estava
+       da última vez que se soube. Melhor marcar o último lugar conhecido do
+       que deixar a lista sem referência nenhuma. */
+    if (!marcado) {
+      const anterior = [...alvoTrechos.children].find(
+        (_, i) => emOrdem[i] && emOrdem[i].fim <= fim);
+      if (anterior) anterior.classList.add("agora");
+    }
+    // Arrastar longe deixaria a marca fora da tela: traz ela de volta.
+    const alvo = alvoTrechos.querySelector(".agora");
+    if (alvo && instante != null) alvo.scrollIntoView({ block: "nearest" });
   }
 
   c.appendChild(caixa);
