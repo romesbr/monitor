@@ -253,6 +253,16 @@ const EXCURSAO_MAX_MS = 5 * 60 * 1000; // os "poucos minutos"
 const PASSO_MARCA = 500;               // m entre os marcos da rota
 
 /**
+ * Tempo sem notícia que já conta como buraco (item 3).
+ *
+ * Mora aqui, e não em paradas.js, por ordem de carregamento: `paradas.js`
+ * importa deste arquivo, então a constante tem de nascer no módulo de baixo
+ * para os dois lados usarem a MESMA. O contrário faria import circular, e
+ * duas cópias do número acabariam divergindo com o tempo.
+ */
+const SINAL_MUDO_MIN = 15;
+
+/**
  * A leitura crua, guardada mas fora da geometria (CONTEXTO-VTU 5.6).
  *
  * A regra de gravação só transforma em ponto o que andou 50 m ou o que
@@ -409,9 +419,31 @@ function removerExcursoes(grupos, raioParada, janelaMs) {
  * Interpola porque o marco quase nunca cai em cima de um vértice: com um
  * ponto a cada 50 m, o de 500 m fica no meio de um trecho.
  */
-function comprimentoDaTrilha(trilha) {
+/**
+ * Um salto entre dois vértices é buraco de silêncio, e não trecho andado?
+ *
+ * A pergunta importa porque a linha reta entre a última notícia e a primeira
+ * depois dela não é caminho percorrido: é o que ninguém viu. Medir por ela
+ * infla a quilometragem — e infla para MENOS ou para MAIS, sem se saber qual:
+ * a loco pode ter ido e voltado dez vezes naquele buraco, ou não ter saído do
+ * lugar. Somar a corda como se fosse percurso é inventar um número.
+ */
+const saltoDeSilencio = (a, b, silencioMs = SINAL_MUDO_MIN * 60000) =>
+  emMs(a) != null && emMs(b) != null && emMs(b) - emMs(a) >= silencioMs;
+
+/**
+ * O comprimento OBSERVADO da trilha: os buracos de silêncio não entram.
+ *
+ * Antes entravam, e o número saía inflado justamente no caso em que ele era
+ * mais citado — o dia em que o aparelho ficou horas fora do ar.
+ */
+function comprimentoDaTrilha(trilha, opcoes = {}) {
+  const { silencioMs = SINAL_MUDO_MIN * 60000 } = opcoes;
   let total = 0;
-  for (let i = 1; i < trilha.length; i++) total += distancia(trilha[i - 1], trilha[i]);
+  for (let i = 1; i < trilha.length; i++) {
+    if (saltoDeSilencio(trilha[i - 1], trilha[i], silencioMs)) continue;
+    total += distancia(trilha[i - 1], trilha[i]);
+  }
   return total;
 }
 
@@ -422,20 +454,26 @@ function comprimentoDaTrilha(trilha) {
  * continua sendo PASSO_MARCA — em viagem longa, marco de 100 em 100 m viraria
  * um colar de contas.
  */
-function passoDosMarcos(trilha, passoMax = PASSO_MARCA) {
-  const total = comprimentoDaTrilha(trilha);
+function passoDosMarcos(trilha, passoMax = PASSO_MARCA, opcoes = {}) {
+  const total = comprimentoDaTrilha(trilha, opcoes);
   if (total < 1000) return 100;
   if (total < 5000) return 250;
   return passoMax;
 }
 
-function marcosDeDistancia(trilha, passo) {
-  const usado = passo ?? passoDosMarcos(trilha);
+function marcosDeDistancia(trilha, passo, opcoes = {}) {
+  const { silencioMs = SINAL_MUDO_MIN * 60000 } = opcoes;
+  const usado = passo ?? passoDosMarcos(trilha, undefined, { silencioMs });
   const marcos = [];
   let acumulado = 0;
   let proximo = usado;
 
   for (let i = 1; i < trilha.length; i++) {
+    /* Buraco de silêncio não ganha marco NEM entra na conta dos quilômetros.
+       Ganhar marco seria pior que inflar o número: a setinha diz "passou por
+       aqui, indo para lá", e ali ninguém passou por lugar nenhum — é o trecho
+       que o mapa desenha tracejado justamente por não se saber o que houve. */
+    if (saltoDeSilencio(trilha[i - 1], trilha[i], silencioMs)) continue;
     const d = distancia(trilha[i - 1], trilha[i]);
     while (d > 0 && acumulado + d >= proximo) {
       const fracao = (proximo - acumulado) / d;
@@ -718,7 +756,10 @@ const MOVIMENTO_SUSTENTADO_MS = 60 * 1000; // item 4: 60 s fora do raio
 const FAROL_AMARELO_MIN = 15;
 const FAROL_VERMELHO_MIN = 25;
 const SINAL_FRACO_MIN = 12;
-const SINAL_MUDO_MIN = 15;
+// SINAL_MUDO_MIN mora em trilha.js: o traçado precisa do mesmo número que o
+// sinal, e lá é o módulo de baixo, sem import circular. Quem precisar dele
+// importa de "./trilha" — reexportar daqui viraria `export { ... }`, que o
+// embutir.js não sabe tirar e derrubaria a página inteira.
 
 /**
  * Quebra o histórico em trechos de parada e de movimento.
@@ -2199,6 +2240,36 @@ function desenharRota() {
       ).addTo(camadaRota);
     });
   }
+
+  /* Buraco de silêncio (item 3): o traço reto entre duas leituras distantes no
+     TEMPO tem a mesma cara de um trecho percorrido de verdade, e vira "passou
+     por aqui" no mapa sem que ninguém saiba que aquilo é chute.
+
+     O app já desenhava isto desde sempre (`src/TelaMonitor.js`); o site não —
+     `trechosDeSilencio` estava no núcleo e nunca era chamado aqui. As duas
+     telas precisam contar a mesma história, então é o mesmo desenho: tracejado
+     cinza por cima da linha cheia, com um marco no meio do vão.
+
+     O balão diz a distância EM LINHA RETA de propósito. Ela não é o quanto a
+     loco andou — no buraco ela pode ter ido e voltado dez vezes, ou não ter
+     saído do lugar. É o mínimo que se pode afirmar, e é assim que está escrito. */
+  trechosDeSilencio(pontos).forEach((s) => {
+    L.polyline([[s.de.lat, s.de.lng], [s.para.lat, s.para.lng]],
+      { color: "#8A94A6", weight: 3, opacity: .8, dashArray: "2 7", lineCap: "round" }
+    ).addTo(camadaRota);
+    L.circleMarker([s.lat, s.lng], {
+      radius: 6, color: "#8A94A6", weight: 2,
+      fillColor: "#fff", fillOpacity: 1, dashArray: "2 3"
+    }).bindTooltip(
+      '<div class="balao"><div class="tit">Sem notícia</div>' +
+      "<div>" + relogioMs(s.inicio) + " às " + relogioMs(s.fim) + "</div>" +
+      '<div class="cinza">' + duracao(s.duracaoMs) + " no escuro · " +
+      (s.metros >= 1000 ? (s.metros / 1000).toFixed(1) + " km" : Math.round(s.metros) + " m") +
+      " em linha reta</div>" +
+      '<div class="cinza">Não se sabe por onde passou.</div></div>',
+      { direction: "top", className: "balao", opacity: 1 }
+    ).addTo(camadaRota);
+  });
 
   calcularTrechos(pontos).forEach((tr) => {
     if (tr.tipo !== "parada" || !tr.ancora) return;
