@@ -1725,8 +1725,19 @@ function janelaDe(chave, horas) {
  * de um horário fresco (CONTEXTO-VTU 5.3).
  */
 function ultimaPosicaoMs(chave) {
-  const boas = leiturasBoas(historico.get(chave) || []);
-  return boas.length ? emMs(boas[boas.length - 1]) : null;
+  const pts = historico.get(chave) || [];
+  const boas = leiturasBoas(pts);
+  if (boas.length) return emMs(boas[boas.length - 1]);
+
+  /* Nenhuma leitura passou no corte de precisão. O núcleo NÃO deixa o pin
+     sumir nesse caso: ele cai na última posição conhecida, mesmo torta. O
+     carimbo tem de acompanhar, senão volta a discordar do mapa — que é
+     exatamente o defeito que esta função existe para não cometer.
+
+     Apareceu em 13/08/2026, num aparelho recém-instalado: três leituras, as
+     três imprecisas, pin no mapa e "Última posição —" ao lado. */
+  const todas = contatos(pts);
+  return todas.length ? emMs(todas[todas.length - 1]) : null;
 }
 
 function estadoDe(chave) {
