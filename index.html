@@ -214,6 +214,7 @@ body.parede .faixa{font-size:16px}
         <button class="fantasma" id="b-salvar">Salvar cerca</button>
       </div>
       <button class="fantasma" id="b-centrar">Ver todos</button>
+      <button class="fantasma" id="b-csv">Baixar CSV</button>
       <button class="fantasma" id="b-parede">Painel</button>
       <button class="fantasma" id="b-sair">Sair</button>
     </div>
@@ -1345,7 +1346,11 @@ function cercaDe(p, cercas) {
  */
 function nomearLugar(p, cercas) {
   const c = cercaDe(p, cercas);
-  return c ? c.nome : coordenada(p);
+  /* Cerca sem nome cai na coordenada, e não vira a palavra "undefined" na
+     tela. Apareceu em 16/08/2026 na lista de trechos — o polígono casou, o
+     nome não existia, e o painel escreveu "09:26 · undefined" para o dono.
+     Um nome que falta é dado faltando; a coordenada ao menos é verdade. */
+  return c && c.nome ? c.nome : coordenada(p);
 }
 
 /**
@@ -2664,6 +2669,84 @@ function montarBotoesDeVinculo(barra, grupo, aparelho, loco) {
 
 const MINUTOS_TIMELINE = DIAS_TIMELINE * 24 * 60;
 
+/* ---------------- extração ---------------- */
+
+/**
+ * O dia de cada ativo em CSV, um trecho por linha.
+ *
+ * Colunas fechadas com o dono em 13/08/2026:
+ *   Loco | Área | Status | Início | Fim
+ *
+ * "Área" é o nome da cerca quando o ponto cai dentro de uma, e a coordenada
+ * quando não cai — a mesma regra que o painel usa, para o arquivo e a tela
+ * nunca discordarem sobre onde o ativo estava.
+ *
+ * O buraco de silêncio entra como linha, com status "Sem sinal". Deixar ele
+ * de fora faria as horas fecharem certinho num arquivo que esconde justamente
+ * o período em que ninguém viu nada — e é esse arquivo que vira cobrança.
+ */
+function montarCsv() {
+  const fim = Date.now();
+  const linhas = [["Loco", "Area", "Status", "Inicio", "Fim"]];
+
+  for (const a of aparelhos) {
+    const chave = chaveDe(a);
+    const pontos = janelaAte(chave, HORAS_ROTA, fim);
+    if (!pontos.length) continue;
+    const grupo = grupoDe(chave);
+    const aparelho = nomeDe(chave);
+
+    const eventos = calcularTrechos(pontos).map((t) => ({
+      inicio: t.inicio, fim: t.fim,
+      status: t.tipo === "parada" ? "Parado" : "Em deslocamento",
+      onde: t.tipo === "parada" && t.ancora ? lugarDe(t.ancora) : "",
+    }));
+    for (const b of trechosDeSilencio(pontos)) {
+      eventos.push({ inicio: b.inicio, fim: b.fim, status: "Sem sinal",
+                     onde: lugarDe({ lat: b.lat, lng: b.lng }) });
+    }
+    eventos.sort((x, y) => x.inicio - y.inicio);
+
+    for (const ev of eventos) {
+      // A loco do INSTANTE do trecho, não a de agora: um aparelho que trocou
+      // de locomotiva no meio do período tem de sair com a certa em cada linha.
+      linhas.push([
+        prefixoEm(vinculos, grupo, aparelho, ev.inicio) || aparelho,
+        ev.onde || lugarDe(estadoAtual(pontos, ev.inicio).posicao),
+        ev.status,
+        dataHoraLocal(ev.inicio),
+        dataHoraLocal(ev.fim),
+      ]);
+    }
+  }
+  return linhas;
+}
+
+/* Ponto e vírgula, e não vírgula: é o separador que o Excel em português
+   entende sem pedir importação. O BOM na frente é o que faz acento aparecer
+   certo — sem ele, "Pátio" vira "PÃ¡tio" na planilha do dono. */
+const paraCsv = (linhas) =>
+  "\ufeff" + linhas.map((l) => l.map((c) => {
+    const t = String(c ?? "");
+    return /[";\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  }).join(";")).join("\r\n");
+
+function baixarCsv() {
+  const linhas = montarCsv();
+  if (linhas.length < 2) { alert("Nenhum trecho no período para exportar."); return; }
+  const blob = new Blob([paraCsv(linhas)], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "rastreio-" + diaLocal(Date.now()) + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Sem isto o blob fica na memória do navegador até a aba fechar, e o painel
+  // de parede não fecha nunca.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function iniciarTimeline() {
   const barra = el("t-barra");
   barra.max = String(MINUTOS_TIMELINE);
@@ -2674,6 +2757,7 @@ function iniciarTimeline() {
     instante = atras === 0 ? null : Date.now() - atras * 60000;
     pintarTudo();
   });
+  el("b-csv").onclick = baixarCsv;
   el("b-agora").onclick = () => {
     instante = null;
     barra.value = String(MINUTOS_TIMELINE);
