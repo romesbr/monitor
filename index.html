@@ -771,6 +771,23 @@ const SINAL_FRACO_MIN = 12;
 // embutir.js não sabe tirar e derrubaria a página inteira.
 
 /**
+ * Parada de duração ZERO não é parada — é cicatriz da quebra por silêncio.
+ *
+ * Quando `calcularTrechos` encontra um buraco, fecha o que estava aberto e
+ * recomeça uma parada no primeiro ponto depois dele. Se esse ponto já sai
+ * andando, essa parada nasce e morre no mesmo instante.
+ *
+ * O dono viu isso no balão do mapa em 19/08/2026: "PARADA · 0s · 18:34 às
+ * 18:34". Num painel que existe para medir ocupação de ativo, uma parada
+ * fantasma é pior que feia — ela entra na contagem de visitas do lugar e no
+ * CSV que vira cobrança.
+ *
+ * O corte é em zero, e só em zero: qualquer parada com duração real, por menor
+ * que seja, é observação legítima e fica.
+ */
+const paradaFantasma = (t) => t.tipo === "parada" && t.fim <= t.inicio;
+
+/**
  * Quebra o histórico em trechos de parada e de movimento.
  *
  * A máquina tem dois estados. Parado, guarda a âncora: leitura que cai dentro
@@ -882,7 +899,7 @@ function calcularTrechos(pontos, opcoes = {}) {
 
   if (!parada) {
     trechos.push({ tipo: "movimento", inicio: movimento.inicio, fim: emMs(movimento.anterior) });
-    return trechos;
+    return trechos.filter((t) => !paradaFantasma(t));
   }
 
   trechos.push({ ...parada, tipo: "parada" });
@@ -894,7 +911,7 @@ function calcularTrechos(pontos, opcoes = {}) {
       fim: emMs(ps[ps.length - 1]),
     });
   }
-  return trechos;
+  return trechos.filter((t) => !paradaFantasma(t));
 }
 
 /**
@@ -992,6 +1009,25 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
 
   const trechos = calcularTrechos(ps, { ...opcoes, agora });
   const ultimo = trechos[trechos.length - 1];
+
+  /* Pode não sobrar trecho nenhum, e isso é legítimo desde 19/08/2026: com uma
+     leitura só, o único trecho possível seria uma parada de duração zero, e
+     parada de zero segundo é cicatriz, não observação — `paradaFantasma` corta.
+     Sabe-se onde o aparelho estava, não por quanto tempo ficou. O pin fica na
+     última posição conhecida e o resto responde "não sei", que é a verdade. */
+  if (!ultimo) {
+    return {
+      posicao: ps[ps.length - 1],
+      ultimaPosicao: ultimaConhecida,
+      ultimoContatoMs,
+      emMovimento: false,
+      desde: null,
+      paradoMs: null,
+      farol: "verde",
+      sinal,
+      trechos: [],
+    };
+  }
 
   // Sem notícia há tempo demais (item 3), não dá para seguir afirmando "em
   // movimento" só porque o relógio passou do prazo de 60 s: essa inferência
