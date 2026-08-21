@@ -61,8 +61,20 @@ button{font-family:'Manrope',sans-serif;font-size:15px;font-weight:600;
   padding:12px 16px;border-radius:10px;border:1px solid var(--vli-azul);
   background:var(--vli-azul);color:#fff;cursor:pointer;width:100%}
 button:hover{opacity:.87}
-button.fantasma{background:transparent;color:var(--tinta);border-color:var(--linha);
-  width:auto;font-size:13px;padding:8px 12px;font-weight:500}
+/* O botão de contorno também é da marca: texto e borda em azul VLI.
+
+   Ele fica no cabeçalho e na barra de cercas, longe dos pins — não disputa
+   leitura com o farol. O preenchido continua sendo o azul cheio, então a
+   hierarquia se lê pela intensidade, não pela cor. */
+button.fantasma{background:transparent;color:var(--vli-azul);
+  border-color:color-mix(in srgb, var(--vli-azul) 35%, var(--linha));
+  width:auto;font-size:13px;padding:8px 12px;font-weight:600}
+button.fantasma:hover{background:color-mix(in srgb, var(--vli-azul) 8%, transparent);
+  border-color:var(--vli-azul);opacity:1}
+/* "Sair" e "Cancelar" não são ação de marca: são saída. Ficam neutros para
+   não competirem com o que o operador realmente vai clicar. */
+#b-sair,#b-cancelar{color:var(--suave);border-color:var(--linha)}
+#b-sair:hover,#b-cancelar:hover{background:transparent;border-color:var(--suave)}
 .nivel{display:flex;gap:8px;margin:14px 0}
 .nivel button{flex:1;background:transparent;color:var(--tinta);
   border-color:var(--linha);font-size:13px;padding:10px;font-weight:600}
@@ -100,7 +112,8 @@ aside{background:var(--cartao);border-right:1px solid var(--linha);overflow-y:au
 .ondas{flex:none;vertical-align:-1px}
 
 /* ---- detalhe do ativo (a lista vira isto ao clicar num pin) ---- */
-.volta{font-size:13px;color:var(--suave);cursor:pointer;display:inline-block;margin-bottom:10px}
+.volta{font-size:13px;color:var(--vli-azul);font-weight:600;cursor:pointer;
+  display:inline-block;margin-bottom:10px}
 .volta:hover{color:var(--tinta)}
 .detalhe h2{font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:800}
 .linha-campo{display:flex;justify-content:space-between;gap:12px;padding:8px 0;
