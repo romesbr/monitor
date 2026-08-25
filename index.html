@@ -1889,13 +1889,34 @@ function ondas(barras) {
 }
 
 /** Pin em gota, pintado pelo farol. Sem sinal, ele esmaece — mas não some. */
+/* O pin está apoiado numa leitura que NÃO passou no corte de precisão?
+
+   Quando não há leitura boa no período, o núcleo não deixa o pin sumir: ele
+   cai na última posição conhecida, mesmo torta. Isso é certo — sumir seria
+   pior. O errado era desenhar esse chute com a mesma cara de uma posição
+   confiável.
+
+   Aconteceu em 25/08/2026: o app subiu, o Android ofereceu a posição da antena
+   antes de o GPS acordar (precisão 100 m) e ela caiu 7 km fora. Era a única
+   leitura das últimas 24 h, então o pin foi para lá — cheio, sólido, idêntico
+   a um pin de GPS travado. O dono viu "pin no local errado" e estava certo: o
+   mapa afirmava com certeza uma coisa que o próprio dado dizia ser um palpite. */
+const pinIncerto = (estado) =>
+  estado.posicao != null &&
+  estado.posicao.precisao != null &&
+  estado.posicao.precisao > PRECISAO_MAX;
+
 function iconePin(estado, aberto) {
   const cor = COR_FAROL[estado.farol] || COR_FAROL.verde;
+  const incerto = pinIncerto(estado);
   const gota =
     '<svg width="30" height="40" viewBox="0 0 30 40">' +
     '<path d="M15 39C15 39 28 23.5 28 14A13 13 0 1 0 2 14C2 23.5 15 39 15 39Z" ' +
-    'fill="' + cor + '" stroke="#fff" stroke-width="' + (aberto ? 3.5 : 2.5) + '"/>' +
-    '<circle cx="15" cy="14" r="5.2" fill="#fff" opacity="' + (aberto ? .95 : .8) + '"/>' +
+    'fill="' + (incerto ? "#fff" : cor) + '" stroke="' + (incerto ? cor : "#fff") +
+    '" stroke-width="' + (aberto ? 3.5 : 2.5) + '"' +
+    (incerto ? ' stroke-dasharray="3 2.5"' : "") + "/>" +
+    '<circle cx="15" cy="14" r="5.2" fill="' + (incerto ? cor : "#fff") +
+    '" opacity="' + (aberto ? .95 : .8) + '"/>' +
     "</svg>";
   return L.divIcon({
     className: "",
@@ -1910,6 +1931,12 @@ function iconePin(estado, aberto) {
  */
 function balaoAtivo(chave, estado) {
   const s = estado.sinal;
+  /* Pin oco pede legenda: sem isto o operador vê um desenho diferente e não
+     sabe o que ele quer dizer. */
+  const incerto = pinIncerto(estado)
+    ? '<div class="cinza">Posição aproximada (±' +
+      Math.round(estado.posicao.precisao) + " m) — veio da antena, não do GPS.</div>"
+    : "";
   const sinalTxt = s.mudo
     ? "sem sinal há " + duracao(s.minutos * 60000)
     : s.nivel === "fraco" ? "sinal fraco" : "sinal bom";
@@ -1921,6 +1948,7 @@ function balaoAtivo(chave, estado) {
     // A hora da última leitura vem sempre junto, não só quando falta sinal:
     // é ela que separa "mapa desatualizado" de "loco parada de verdade".
     '<div class="cinza">última posição ' + escapar(relogioMs(estado.ultimoContatoMs)) + "</div>" +
+    incerto +
     "</div>";
 }
 
