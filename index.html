@@ -1078,9 +1078,36 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
   // vale para quem saiu e ainda dá notícia, não para quem sumiu de vez. Sem
   // sinal, cai nas regras normais de parado (item 4), contando desde a
   // última posição que se tem de fato.
-  const emMovimento = ultimo.tipo === "movimento" && !sinal.mudo;
-  const desde = emMovimento ? ultimo.inicio : (sinal.mudo ? emMs(ps[ps.length - 1]) : ultimo.inicio);
-  const paradoMs = emMovimento ? null : agora - desde;
+  /* O traçado parou de andar faz tempo?
+
+     Esta é a terceira e última porta pela qual o "Em Deslocamento há 65h"
+     entrava, e a mais difícil de ver. As outras duas já estavam fechadas: o
+     corte por silêncio dentro de `calcularTrechos`, e a guarda `!sinal.mudo`
+     aqui embaixo, para quem AINDA está calado.
+
+     Falta o caso do meio, medido no CEL LEO em 25/08/2026: o aparelho voltou a
+     FALAR, mas só com leitura de antena — 96 leituras no dia, nenhuma passando
+     no corte de precisão. Para o sinal ele está vivo (`mudo` é falso, e está
+     certo: ele fala). Para o traçado ele desapareceu em 20/08, porque leitura
+     torta não vira posição. O último trecho ficou sendo um movimento aberto de
+     cinco dias atrás, e o painel anunciou "Em Deslocamento há 112h46".
+
+     Sinal e posição são perguntas diferentes, e é por isso que a guarda do
+     sinal não bastava: o que importa aqui é se houve POSIÇÃO recente, não se
+     houve contato. Sem leitura boa desde então, não dá para afirmar que ele
+     segue andando — nem por quanto tempo está parado. O painel diz o que sabe:
+     onde ele foi visto pela última vez, e nada de duração inventada.
+
+     Num relatório de ocupação, 112 h de "deslocamento" que ninguém observou
+     seria destruído no primeiro questionamento (CONTEXTO-VTU 2). */
+  const semPosicaoDesde = agora - ultimo.fim;
+  const tracadoCongelado = semPosicaoDesde >= (opcoes.silencioMs ?? SINAL_MUDO_MIN * 60000);
+
+  const emMovimento = ultimo.tipo === "movimento" && !sinal.mudo && !tracadoCongelado;
+  const desde = tracadoCongelado
+    ? null
+    : (emMovimento ? ultimo.inicio : (sinal.mudo ? emMs(ps[ps.length - 1]) : ultimo.inicio));
+  const paradoMs = emMovimento || desde == null ? null : agora - desde;
 
   return {
     // Parado, o pin fica na âncora: é o lugar, não a última tremida do GPS.
