@@ -1205,6 +1205,12 @@ function textoStatus(estado) {
     const ms = estado.desde != null ? Date.now() - estado.desde : null;
     return ms != null && ms > 0 ? "Em Deslocamento há " + duracao(ms) : "Em Deslocamento";
   }
+  /* Sem tempo apurado, diz só "Parado". Aparece quando há UMA leitura boa e
+     mais nada — as outras não passaram no corte de precisão — e aí não existe
+     trecho, logo não existe duração. "Parado há —" é frase quebrada, e pior:
+     parece defeito quando na verdade é o painel sendo honesto sobre não saber
+     há quanto tempo. Sabe-se que ele está lá; não se sabe desde quando. */
+  if (estado.paradoMs == null) return "Parado";
   return "Parado há " + duracao(estado.paradoMs);
 }
 
