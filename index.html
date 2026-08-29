@@ -1022,6 +1022,66 @@ function calcularSinal(ultimaMs, agora = Date.now()) {
  * que valia naquele momento — é o que a timeline (item 6) vai pedir, com
  * todos os pins voltando juntos.
  */
+/* Quantas vezes o próprio erro da leitura ela precisa ter andado para o pin
+   acreditar nela. Três é folgado: a 100 m de precisão, exige 300 m de
+   diferença — muito além de tremida de antena, muito aquém de mudar de pátio. */
+const FATOR_MUDANCA = 3;
+
+/**
+ * Onde o pin fica, quando a última leitura boa e a última notícia discordam.
+ *
+ * A regra geral é e continua sendo: o pin só se move com leitura boa. Leitura
+ * de antena (100 m) não diz em que linha a locomotiva está, e deixá-la mover o
+ * pin faria o mapa tremer sozinho a noite inteira.
+ *
+ * Só que a regra, sozinha, produz um absurdo — medido em 29/08/2026 no
+ * CEL CORP LEO. A última leitura boa era das 16:21 do dia anterior, em
+ * Itacibá. O aparelho estava em Santa Helena e dizia isso desde as 6 da manhã,
+ * com 100 m de precisão. O painel mostrava Itacibá.
+ *
+ *     descartar um dado que erra 100 m
+ *     para mostrar uma posição que erra 6.916 m
+ *
+ * Uma leitura de antena é ruim para escolher entre dois desvios do mesmo
+ * pátio, e é ÓTIMA para saber que o ativo não está mais na cidade onde o pin
+ * diz. O erro dela é conhecido; basta exigir que a diferença seja grande
+ * perto desse erro.
+ *
+ * Então: prefere-se a leitura boa, como sempre. Mas se a notícia mais nova
+ * está a mais de três vezes o próprio erro dela de distância, ela ganha — e
+ * o pin sai desenhado como INCERTO, porque `pinIncerto` olha a precisão da
+ * posição escolhida e essa é grossa. O painel passa a dizer "ele está por
+ * aqui, mais ou menos" em vez de "ele está lá", com certeza e errado.
+ */
+/**
+ * Carimba o estado com a HORA DA POSIÇÃO QUE O PIN ESTÁ MOSTRANDO.
+ *
+ * Existe para matar uma classe inteira de defeito, não um defeito. Três vezes
+ * — 12/08, 13/08 e 29/08/2026 — o painel mostrou hora fresca ao lado de pin
+ * velho, e todas as três vezes a causa foi a mesma: quem escolhe o pin e quem
+ * escolhe a hora eram dois pedaços de código diferentes, cada um com a sua
+ * regra, e bastava mexer num para os dois discordarem de novo.
+ *
+ * Com `posicaoMs` saindo daqui, junto de `posicao`, não há mais duas regras
+ * para manter em acordo: quem mostra o pin mostra a hora dele.
+ */
+const comHoraDoPin = (estado) => ({
+  ...estado,
+  posicaoMs: estado.posicao ? emMs(estado.posicao) : null,
+});
+
+function escolherPin(escolhida, ultimaConhecida, precisaoMax = PRECISAO_MAX) {
+  if (!ultimaConhecida) return escolhida;
+  if (!escolhida) return ultimaConhecida;
+  // Notícia velha nunca vence: na timeline arrastada para o passado isto
+  // seria contaminar o retrato daquele instante com o que veio depois.
+  if (emMs(ultimaConhecida) <= emMs(escolhida)) return escolhida;
+  const erro = Math.max(ultimaConhecida.precisao ?? precisaoMax, precisaoMax);
+  return distancia(escolhida, ultimaConhecida) > erro * FATOR_MUDANCA
+    ? ultimaConhecida
+    : escolhida;
+}
+
 function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
   const ps = leiturasBoas(pontos, opcoes.precisaoMax).filter((p) => emMs(p) <= agora);
   const todas = contatos(pontos).filter((p) => emMs(p) <= agora);
@@ -1038,7 +1098,7 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
 
   if (!ps.length) {
     // Sem leitura boa o pin ainda tem de aparecer, na última posição conhecida.
-    return {
+    return comHoraDoPin({
       posicao: ultimaConhecida,
       ultimaPosicao: ultimaConhecida,
       ultimoContatoMs,
@@ -1048,7 +1108,7 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
       farol: "verde",
       sinal,
       trechos: [],
-    };
+    });
   }
 
   const trechos = calcularTrechos(ps, { ...opcoes, agora });
@@ -1060,8 +1120,8 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
      Sabe-se onde o aparelho estava, não por quanto tempo ficou. O pin fica na
      última posição conhecida e o resto responde "não sei", que é a verdade. */
   if (!ultimo) {
-    return {
-      posicao: ps[ps.length - 1],
+    return comHoraDoPin({
+      posicao: escolherPin(ps[ps.length - 1], ultimaConhecida, opcoes.precisaoMax),
       ultimaPosicao: ultimaConhecida,
       ultimoContatoMs,
       emMovimento: false,
@@ -1070,7 +1130,7 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
       farol: "verde",
       sinal,
       trechos: [],
-    };
+    });
   }
 
   // Sem notícia há tempo demais (item 3), não dá para seguir afirmando "em
@@ -1109,11 +1169,13 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
     : (emMovimento ? ultimo.inicio : (sinal.mudo ? emMs(ps[ps.length - 1]) : ultimo.inicio));
   const paradoMs = emMovimento || desde == null ? null : agora - desde;
 
-  return {
+  return comHoraDoPin({
     // Parado, o pin fica na âncora: é o lugar, não a última tremida do GPS.
     // Sem âncora (trecho de movimento que virou "sem sinal"), fica na
     // última posição conhecida.
-    posicao: emMovimento ? ps[ps.length - 1] : (ultimo.ancora || ps[ps.length - 1]),
+    posicao: escolherPin(
+      emMovimento ? ps[ps.length - 1] : (ultimo.ancora || ps[ps.length - 1]),
+      ultimaConhecida, opcoes.precisaoMax),
     // A última posição de fato lida, sem âncora nem arredondamento. É o que
     // o painel mostra com hora ao lado, para ninguém confundir mapa parado
     // no tempo com locomotiva parada no pátio (CONTEXTO-VTU 5.3).
@@ -1125,7 +1187,7 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
     farol: farolDe(paradoMs / 60000, emMovimento),
     sinal,
     trechos,
-  };
+  });
 }
 
 /**
@@ -1832,40 +1894,31 @@ const janelaDe = (chave, horas) => janelaAte(chave, horas, relogioAtual());
  * estado daquele instante.
  */
 /**
- * O horário da última posição que REALMENTE MOVEU O PIN.
+ * O horário da posição que o pin ESTÁ MOSTRANDO.
  *
- * Antes esta função pegava o carimbo mais novo do histórico, qualquer que
- * fosse a precisão. O pin, não: `estadoAtual` só olha `leiturasBoas`, que
- * corta acima de PRECISAO_MAX (50 m). Duas respostas diferentes para a mesma
- * leitura, e o painel mostrava a otimista ao lado de um mapa desatualizado.
+ * Esta função já foi duas coisas erradas e agora não é mais nada: ela só
+ * pergunta ao núcleo. Vale contar por quê, porque a lição é sobre o formato do
+ * defeito, não sobre o defeito.
  *
- * Foi o defeito relatado em 12/08/2026 ("diz que puxou o dado recente mas
- * está errada no mapa"). Medido nos pontos reais do CEL Leo: o painel dizia
- * "Última posição 20:38 (5min)" e o pin estava no ponto das 17:49 — 833 m de
- * distância. O aparelho estava vivo e falando, mas havia horas que só mandava
- * posição grosseira (100 m, sempre as mesmas coordenadas: é a rede de
- * celular respondendo, não o GPS). Boa para provar que ele está vivo, inútil
- * para dizer onde ele está.
+ * Primeiro ela pegava o carimbo mais novo do histórico, qualquer que fosse a
+ * precisão, enquanto o pin só olhava leitura boa. Duas respostas para a mesma
+ * pergunta — 12/08/2026: "Última posição 20:38 (5min)" ao lado de um pin do
+ * ponto das 17:49, 833 m adiante.
  *
- * Agora o carimbo usa o MESMO corte do pin. Quando o GPS está dormindo, o
- * painel passa a dizer a verdade — "Última posição 17:49 (2h55)" junto de
- * "Último dado agora" — em vez de esconder três horas de mapa parado atrás
- * de um horário fresco (CONTEXTO-VTU 5.3).
+ * Depois passou a repetir aqui a regra do pin — mesmo corte de precisão, mesmo
+ * recuo para a última posição conhecida. Consertou aquele caso e manteve o
+ * formato do erro: DUAS cópias de uma regra só. Em 29/08/2026 a regra do pin
+ * mudou no núcleo (leitura de antena longe demais passou a mover o pin) e esta
+ * cópia, claro, não mudou junto. Voltou a mesma incoerência, pela terceira vez.
+ *
+ * Agora `estadoAtual` devolve `posicaoMs` junto de `posicao`, e quem mostra o
+ * pin mostra a hora dele. Não há mais duas regras para manter em acordo, e é
+ * essa a diferença — as duas correções anteriores consertaram o sintoma e
+ * deixaram a máquina de repetir intacta.
  */
 function ultimaPosicaoMs(chave) {
-  const pts = historico.get(chave) || [];
-  const boas = leiturasBoas(pts);
-  if (boas.length) return emMs(boas[boas.length - 1]);
-
-  /* Nenhuma leitura passou no corte de precisão. O núcleo NÃO deixa o pin
-     sumir nesse caso: ele cai na última posição conhecida, mesmo torta. O
-     carimbo tem de acompanhar, senão volta a discordar do mapa — que é
-     exatamente o defeito que esta função existe para não cometer.
-
-     Apareceu em 13/08/2026, num aparelho recém-instalado: três leituras, as
-     três imprecisas, pin no mapa e "Última posição —" ao lado. */
-  const todas = contatos(pts);
-  return todas.length ? emMs(todas[todas.length - 1]) : null;
+  const estado = estadoAtual(historico.get(chave) || [], relogioAtual());
+  return estado.posicaoMs;
 }
 
 function estadoDe(chave) {
