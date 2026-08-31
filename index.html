@@ -411,6 +411,40 @@ function contatos(pontos) {
 }
 
 /**
+ * O raio da parada ACOMPANHA o erro das leituras comparadas.
+ *
+ * O raio fixo de 20 m nasceu quando quem entregava posição era o
+ * `expo-location` com precisão "Balanced" — leitura FUNDIDA pelo Android, que
+ * treme pouco. Desde a v33 quem lê o GPS é um serviço próprio, que pede o
+ * provedor cru, e a deriva ficou maior que o raio.
+ *
+ * Medido em 31/08/2026, com os aparelhos parados: as leituras que desenham o
+ * traçado caíam a 24 m uma da outra em média, com picos de 93 m. Todas fora do
+ * raio de 20 m. Resultado: a parada se partia em dezenas de pedaços, e o mapa
+ * mostrava um ponto, nada por treze minutos, outro ponto um pouco ao lado. O
+ * dono chamou de "soluços no mapa", e é exatamente o que era.
+ *
+ * A regra certa é a mesma que já vale para decidir se houve movimento (ver
+ * `pisoDoSalto` em gravacao.js): duas leituras que erram ±40 m cada não
+ * conseguem provar 20 m de deslocamento. SOMA os dois erros, porque se eles
+ * apontarem para lados opostos a distância medida cresce pela soma sem
+ * ninguém ter saído do lugar.
+ *
+ * O custo, e é honesto declarar: com duas leituras no limite do corte (50 m
+ * cada), o raio chega a 100 m, e duas paradas de verdade a 80 m uma da outra
+ * viram uma só. Isso não é perda de informação — é a informação que a medida
+ * NÃO TEM. Fingir 20 m de resolução com leitura de 50 m é inventar precisão.
+ * Na prática o raio fica bem menor: com o GPS quente as leituras vêm com 7 a
+ * 25 m, e o raio fica em 20 a 50 m.
+ */
+function raioEfetivo(a, b, raioParada) {
+  return Math.max(
+    raioParada,
+    (a?.precisao ?? 0) + (b?.precisao ?? 0)
+  );
+}
+
+/**
  * Junta num nó só as leituras consecutivas que ficam dentro do raio de parada.
  * Parado, o GPS não para de mandar ponto — sem isso a linha vira um novelo em
  * cima da casa.
@@ -419,7 +453,7 @@ function agrupar(pontos, raioParada) {
   const grupos = [];
   for (const p of pontos) {
     const ultimo = grupos[grupos.length - 1];
-    if (ultimo && distancia(ultimo.ancora, p) <= raioParada) {
+    if (ultimo && distancia(ultimo.ancora, p) <= raioEfetivo(ultimo.ancora, p, raioParada)) {
       ultimo.fim = emMs(p);
     } else {
       grupos.push({ ancora: p, inicio: emMs(p), fim: emMs(p) });
@@ -443,7 +477,8 @@ function removerExcursoes(grupos, raioParada, janelaMs) {
       let retorno = -1;
       for (let k = j; k < grupos.length; k++) {
         if (grupos[k].inicio - base.fim > janelaMs) break;
-        if (distancia(base.ancora, grupos[k].ancora) <= raioParada) retorno = k;
+        if (distancia(base.ancora, grupos[k].ancora) <=
+            raioEfetivo(base.ancora, grupos[k].ancora, raioParada)) retorno = k;
       }
       if (retorno < 0) break;
       base.fim = grupos[retorno].fim; // a parada continua; o desvio some
@@ -914,7 +949,18 @@ function calcularTrechos(pontos, opcoes = {}) {
     }
 
     if (parada) {
-      if (distancia(parada.ancora, p) <= raio) {
+      /* Raio EFETIVO, não o fixo — e este é o lugar que decide "Em
+         Deslocamento", não o desenho da linha.
+
+         Descoberto em 31/08/2026, e a lição é sobre conserto pela metade: eu
+         tinha acabado de fazer o raio acompanhar o erro da leitura, mas só no
+         `agrupar` e no `removerExcursoes`, que desenham a trilha. Aqui, que é
+         quem separa parada de movimento, o raio continuou fixo em 20 m. O
+         painel parou de dar soluço na linha e continuou anunciando
+         "Em Deslocamento há 24min" com o CEL CORP LEO parado na mesa —
+         conferido rodando este núcleo em cima dos pontos reais dele antes de
+         prometer qualquer coisa ao dono. */
+      if (distancia(parada.ancora, p) <= raioEfetivo(parada.ancora, p, raio)) {
         parada.fim = t;      // continua parado
         suspeita = null;     // se havia saída em curso, foi excursão: esquece
         continue;
@@ -931,7 +977,7 @@ function calcularTrechos(pontos, opcoes = {}) {
     }
 
     // em movimento: assentou?
-    if (distancia(movimento.anterior, p) <= raio) {
+    if (distancia(movimento.anterior, p) <= raioEfetivo(movimento.anterior, p, raio)) {
       const chegada = emMs(movimento.anterior);
       trechos.push({ tipo: "movimento", inicio: movimento.inicio, fim: chegada });
       parada = { ancora: movimento.anterior, inicio: chegada, fim: t };
