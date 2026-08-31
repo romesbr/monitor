@@ -949,7 +949,18 @@ function calcularTrechos(pontos, opcoes = {}) {
     }
 
     if (parada) {
-      if (distancia(parada.ancora, p) <= raio) {
+      /* Raio EFETIVO, não o fixo — e este é o lugar que decide "Em
+         Deslocamento", não o desenho da linha.
+
+         Descoberto em 31/08/2026, e a lição é sobre conserto pela metade: eu
+         tinha acabado de fazer o raio acompanhar o erro da leitura, mas só no
+         `agrupar` e no `removerExcursoes`, que desenham a trilha. Aqui, que é
+         quem separa parada de movimento, o raio continuou fixo em 20 m. O
+         painel parou de dar soluço na linha e continuou anunciando
+         "Em Deslocamento há 24min" com o CEL CORP LEO parado na mesa —
+         conferido rodando este núcleo em cima dos pontos reais dele antes de
+         prometer qualquer coisa ao dono. */
+      if (distancia(parada.ancora, p) <= raioEfetivo(parada.ancora, p, raio)) {
         parada.fim = t;      // continua parado
         suspeita = null;     // se havia saída em curso, foi excursão: esquece
         continue;
@@ -966,7 +977,7 @@ function calcularTrechos(pontos, opcoes = {}) {
     }
 
     // em movimento: assentou?
-    if (distancia(movimento.anterior, p) <= raio) {
+    if (distancia(movimento.anterior, p) <= raioEfetivo(movimento.anterior, p, raio)) {
       const chegada = emMs(movimento.anterior);
       trechos.push({ tipo: "movimento", inicio: movimento.inicio, fim: chegada });
       parada = { ancora: movimento.anterior, inicio: chegada, fim: t };
