@@ -104,8 +104,14 @@ aside{background:var(--cartao);border-right:1px solid var(--linha);overflow-y:au
 .item.on{background:var(--papel);border-color:var(--linha)}
 .item .corpo{min-width:0;flex:1}
 .item .nome{font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px}
+/* QUEBRA a linha em vez de cortar com reticências.
+   Reclamado pelo dono em 31/08/2026 ("visibilidade quebrada... não dá pra ver
+   mais nada") e visível no retrato do painel: "Sem vínculo · Em Deslocamento…"
+   terminava em reticências, e o dado que ele precisava lia ficava do lado de
+   fora. Numa tela de parede, texto cortado é informação perdida — cabe uma
+   segunda linha, não cabe o operador passar o mouse para descobrir o resto. */
 .item .campo{font-size:13px;color:var(--suave);margin-top:3px;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  white-space:normal;overflow-wrap:anywhere}
 .item .campo b{font-weight:600;color:var(--tinta)}
 .bola{width:11px;height:11px;border-radius:50%;flex:none;margin-top:5px}
 .mudo{opacity:.45}
@@ -121,7 +127,7 @@ aside{background:var(--cartao);border-right:1px solid var(--linha);overflow-y:au
 .linha-campo .rot{color:var(--suave)}
 .linha-campo .val{text-align:right;font-weight:600}
 .lugar{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0}
-.lugar .nom{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lugar .nom{white-space:normal;overflow-wrap:anywhere}
 .lugar .dur{font-family:'JetBrains Mono',monospace;color:var(--suave);flex:none}
 /* A linha de trechos acompanha a timeline: o trecho que contém o instante
    arrastado ganha a marca vermelha, e o que vem DEPOIS dele esmaece — assim
@@ -2614,8 +2620,25 @@ function desenharPainelLateral() {
       ? "Sem vínculo · " + textoStatus(e)
       : esperando ? "Aguarda loco" : textoStatus(e);
     if (semVinculoAndando) d.querySelector(".st").style.color = "var(--morno)";
+    /* "última posição" agora mostra a hora DA POSIÇÃO, e a idade dela.
+    
+       Estava escrito "última posição" e mostrando `ultimoContatoMs`, que é o
+       último CONTATO — outra coisa. É a mesma incoerência que já apareceu três
+       vezes neste projeto (12/08, 13/08, 29/08), e que o núcleo resolveu
+       passando a devolver `posicaoMs` junto de `posicao`. O balão do detalhe
+       foi corrigido; a LISTA ficou para trás, mentindo no lugar que o dono mais
+       olha.
+    
+       E vai com a idade junto ("· há 5min"). Numa tela de parede, "15:59"
+       sozinho obriga quem passa a fazer a conta de cabeça; e um painel que
+       parou de atualizar tem exatamente a mesma cara de um pátio parado. */
+    const posMs = e.posicaoMs ?? e.ultimoContatoMs;
+    const idade = posMs != null ? relogioAtual() - posMs : null;
     d.querySelector(".lc").textContent = lugarDe(e.posicao) +
-      " · última posição " + relogioMs(e.ultimoContatoMs);
+      (posMs != null
+        ? " · posição " + relogioMs(posMs) +
+          (idade != null && idade > 0 ? " · há " + duracao(idade) : "")
+        : " · sem posição");
     d.onclick = () => { selecionado = chave; enquadrado = false; pintarTudo(); };
     return d;
   };
@@ -2778,7 +2801,13 @@ function desenharDetalhe(c) {
       const d = document.createElement("div");
       d.className = "lugar";
       d.innerHTML = '<span class="nom"></span><span class="dur"></span>';
-      d.querySelector(".nom").textContent = l.lugar + (l.visitas > 1 ? " (" + l.visitas + "×)" : "");
+      /* Só o nome do lugar. O "(5×)" saiu a pedido do dono em 01/09/2026, e a
+         razão é boa: a coluna da direita JÁ É o tempo somado das cinco visitas
+         — `resumoPorLugar` acumula `total` e o `(5×)` era só um rótulo ao lado.
+         Quem batia o olho lia como se o tempo fosse de uma visita e houvesse
+         mais quatro escondidas. Um número que precisa de explicação numa tela
+         de parede é um número que atrapalha. */
+      d.querySelector(".nom").textContent = l.lugar;
       d.querySelector(".dur").textContent = duracao(l.total);
       alvoLugares.appendChild(d);
     });
