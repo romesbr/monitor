@@ -971,7 +971,11 @@ function calcularTrechos(pontos, opcoes = {}) {
         suspeita = null;     // se havia saída em curso, foi excursão: esquece
         continue;
       }
-      if (!suspeita) suspeita = { desde: t };
+      /* `leituras` conta quantas leituras BOAS já viram o aparelho fora do
+         raio. É o que separa uma saída observada de uma saída deduzida — ver
+         a nota no fim desta função, onde esse número decide. */
+      if (!suspeita) suspeita = { desde: t, leituras: 0 };
+      suspeita.leituras++;
       if (t - suspeita.desde <= movimentoSustentadoMs) continue;
 
       // fora do raio por mais de 60 s: saiu mesmo
@@ -999,8 +1003,39 @@ function calcularTrechos(pontos, opcoes = {}) {
   }
 
   trechos.push({ ...parada, tipo: "parada" });
-  // Saiu do raio e o tempo passou sem voltar: a saída se confirma sozinha.
-  if (suspeita && relogio - suspeita.desde > movimentoSustentadoMs) {
+  /* Saiu do raio e o tempo passou sem voltar: a saída se confirma sozinha —
+     mas só se DUAS leituras tiverem visto o aparelho fora. Uma não basta.
+
+     Medido em 01/09/2026 nos dois aparelhos, contra os pontos reais do banco:
+     em 41 horas, o CEL CORP LEO acumulou 17 episódios e 159 minutos de
+     "Em Deslocamento" que ninguém observou. O caso típico, em 30/08 às 21:24:
+
+         21:09  precisão 31 m, mesmo lugar
+         21:24  precisão 31 m, mesmo lugar
+         21:24  precisão  4 m, 45 m adiante   ← única leitura "fora"
+         21:54  (meia hora de silêncio)
+
+     O aparelho estava numa mesa. O que se moveu foi a PRECISÃO: ele trocou uma
+     posição de antena por uma de GPS, no mesmo lugar físico. Uma leitura só
+     viu isso, e o relógio, sozinho, promoveu a leitura a viagem — e o painel
+     ficou 14 minutos anunciando deslocamento.
+
+     Por que uma leitura basta hoje: a regra dos 60 s foi escrita quando o
+     aparelho lia a cada 10 s, e 60 s ali eram meia dúzia de leituras
+     concordando. Com o alarme de 5 em 5 minutos e o aparelho em Doze, os
+     mesmos 60 s de relógio são cumpridos por UMA leitura e mais nada.
+
+     Dentro do laço nada muda: lá a confirmação já vem de leitura, porque só se
+     chega naquela linha com uma segunda leitura em mãos, também fora do raio.
+     É só aqui, na cauda, que o relógio decidia sem testemunha.
+
+     O preço, dito claro: quando as leituras são esparsas e a locomotiva sai de
+     verdade, o painel demora até uma leitura a mais para anunciar — dez, quinze
+     minutos. Aceito de propósito. Num painel de ocupação, dizer "parado" por
+     mais dez minutos custa uma conferida a mais; dizer "em deslocamento" sem
+     que ninguém tenha visto vira número em relatório de cobrança
+     (CONTEXTO-VTU 2), e esse não se defende. */
+  if (suspeita && suspeita.leituras >= 2 && relogio - suspeita.desde > movimentoSustentadoMs) {
     trechos.push({
       tipo: "movimento",
       inicio: parada.fim,
@@ -1212,7 +1247,19 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
 
      Num relatório de ocupação, 112 h de "deslocamento" que ninguém observou
      seria destruído no primeiro questionamento (CONTEXTO-VTU 2). */
-  const semPosicaoDesde = agora - ultimo.fim;
+  /* Medido pela última leitura BOA, não pelo fim do último trecho.
+
+     Os dois eram a mesma coisa até 01/09/2026. Deixaram de ser quando a saída
+     passou a exigir duas leituras: a leitura solitária que abriu a suspeita é
+     posição confiável de verdade, e não cabe em trecho nenhum — não estica a
+     parada, porque está fora do raio, e não abre movimento, porque ninguém a
+     confirmou. Cobrando de `ultimo.fim`, ela seria ignorada e o painel diria
+     "sem posição confiável" com uma posição confiável na mão.
+
+     Além de consertar isso, é o que a pergunta sempre quis dizer: houve
+     POSIÇÃO recente? Quem responde isso é a leitura, não a arrumação dela em
+     trechos. */
+  const semPosicaoDesde = agora - emMs(ps[ps.length - 1]);
   const tracadoCongelado = semPosicaoDesde >= (opcoes.silencioMs ?? SINAL_MUDO_MIN * 60000);
 
   const emMovimento = ultimo.tipo === "movimento" && !sinal.mudo && !tracadoCongelado;
