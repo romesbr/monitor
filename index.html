@@ -115,7 +115,7 @@ aside{background:var(--cartao);border-right:1px solid var(--linha);overflow-y:au
 .item .campo b{font-weight:600;color:var(--tinta)}
 .bola{width:11px;height:11px;border-radius:50%;flex:none;margin-top:5px}
 .mudo{opacity:.45}
-.ondas{flex:none;vertical-align:-1px}
+.sinal{flex:none;vertical-align:-1px}
 
 /* ---- detalhe do ativo (a lista vira isto ao clicar num pin) ---- */
 .volta{font-size:13px;color:var(--vli-azul);font-weight:600;cursor:pointer;
@@ -2139,20 +2139,39 @@ function faixa(txt) {
 /** O nome do lugar: a cerca em que o ponto cai, ou a coordenada. */
 const lugarDe = (p) => nomearLugar(p, cercas);
 
-/** Ícone de ondas do sinal — sem cor, como pede o item 3. */
-function ondas(barras) {
-  const arco = (r, on) =>
-    '<path d="M0,' + r + ' A' + r + ',' + r + ' 0 0 1 ' + r + ',0" fill="none" ' +
-    'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" ' +
-    'opacity="' + (on ? 1 : .22) + '" />';
+/**
+ * A força do sinal em PAUZINHOS, como celular e rádio mostram.
+ *
+ * Era um leque de arcos, estilo wi-fi. O dono pediu a troca em 31/08/2026, e a
+ * razão é boa para painel de parede: o desenho de wi-fi é lido como "internet",
+ * e o que este ícone diz é outra coisa — há quanto tempo o aparelho deu
+ * notícia. Pauzinhos crescentes é o vocabulário que todo mundo já tem para
+ * "força de sinal", e não precisa de legenda.
+ *
+ * São TRÊS níveis porque `calcularSinal` só produz três: 3 barras (notícia
+ * recente), 1 barra (fraco) e 0 (mudo, com o corte atravessado). Desenhar
+ * quatro pauzinhos sugeriria uma resolução que a conta não tem.
+ *
+ * Uma função só, usada nos três lugares — lista, balão do pin e detalhe. O
+ * backlog avisava para não consertar só um; com uma função, isso não pode
+ * acontecer.
+ */
+function barrasDeSinal(barras) {
+  /* Alturas crescentes, todas apoiadas na mesma linha de base. */
+  const pau = (x, altura, on) =>
+    '<rect x="' + x + '" y="' + (12 - altura) + '" width="2.6" height="' + altura +
+    '" rx="1.1" fill="currentColor" opacity="' + (on ? 1 : .22) + '" />';
+
   const corte = barras === 0
-    ? '<line x1="1" y1="11" x2="11" y2="1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'
+    ? '<line x1="0.5" y1="11.5" x2="11.5" y2="0.5" stroke="currentColor" ' +
+      'stroke-width="1.6" stroke-linecap="round"/>'
     : "";
-  return '<svg class="ondas" width="13" height="13" viewBox="-0.5 -0.5 13 13" aria-hidden="true">' +
-    '<circle cx="0.6" cy="11.4" r="1.1" fill="currentColor" opacity="' + (barras > 0 ? 1 : .22) + '"/>' +
-    '<g transform="translate(0.6,11.4) rotate(-90)">' +
-    arco(4.5, barras >= 1) + arco(7.5, barras >= 3) + arco(10.5, barras >= 3) +
-    "</g>" + corte + "</svg>";
+
+  return '<svg class="sinal" width="13" height="13" viewBox="-0.5 -0.5 13 13" aria-hidden="true">' +
+    pau(0.4, 4.5, barras >= 1) +
+    pau(4.4, 8, barras >= 3) +
+    pau(8.4, 11.5, barras >= 3) +
+    corte + "</svg>";
 }
 
 /** Pin em gota, pintado pelo farol. Sem sinal, ele esmaece — mas não some. */
@@ -2210,7 +2229,7 @@ function balaoAtivo(chave, estado) {
   return '<div class="balao">' +
     '<div class="tit">' + escapar(rotuloDe(chave)) + "</div>" +
     "<div>" + escapar(textoStatus(estado)) + "</div>" +
-    '<div class="cinza">' + ondas(s.barras) + " " + escapar(sinalTxt) + "</div>" +
+    '<div class="cinza">' + barrasDeSinal(s.barras) + " " + escapar(sinalTxt) + "</div>" +
     '<div class="cinza">' + escapar(lugarDe(estado.posicao)) + "</div>" +
     // A hora da última leitura vem sempre junto, não só quando falta sinal:
     // é ela que separa "mapa desatualizado" de "loco parada de verdade".
@@ -2737,7 +2756,7 @@ function desenharPainelLateral() {
           : (COR_FAROL[e.farol] || "var(--parado)")) + '"></span>' +
       '<div class="corpo">' +
         '<div class="nome"><span class="n"></span>' +
-          '<span class="' + (e.sinal.mudo ? "mudo" : "") + '">' + ondas(e.sinal.barras) + "</span>" +
+          '<span class="' + (e.sinal.mudo ? "mudo" : "") + '">' + barrasDeSinal(e.sinal.barras) + "</span>" +
         "</div>" +
         '<div class="campo"><b class="st"></b></div>' +
         '<div class="campo lc"></div>' +
@@ -2878,7 +2897,7 @@ function desenharDetalhe(c) {
   const noLugar = tempoNoLugar(historico.get(selecionado) || [], cercas, fim);
   caixa.querySelector(".lc").textContent =
     lugarDe(e.posicao) + (noLugar ? " · há " + duracao(noLugar) : "");
-  caixa.querySelector(".sn").innerHTML = ondas(s.barras) + " " +
+  caixa.querySelector(".sn").innerHTML = barrasDeSinal(s.barras) + " " +
     escapar(s.mudo ? "sem sinal há " + duracao(s.minutos * 60000)
       : s.nivel === "fraco" ? "fraco" : "bom");
   /* Dois campos, e a diferença entre eles é o ponto todo.
