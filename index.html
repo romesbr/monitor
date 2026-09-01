@@ -1986,6 +1986,77 @@ function carregarPontos(grupo, dispositivo, horas) {
   });
 }
 
+/**
+ * O SERVIDOR CORTA EM 1000 LINHAS, E CORTA AS MAIS NOVAS.
+ *
+ * Medido em 01/09/2026, chamando a RPC direto, com o CEL LEO:
+ *
+ *     janela de 168 h  ->  1000 linhas, de 25/08 23:34 ate 01/09 15:11
+ *     janela de   3 h  ->   172 linhas, ate agora
+ *
+ * O painel pedia a semana inteira de uma vez, recebia as 1000 MAIS ANTIGAS e
+ * nunca enxergava nada depois das 12:11. O pin do CEL LEO ficou nove horas
+ * para tras, na OF ITACIBA ADM, enquanto o aparelho dava noticia havia 24
+ * minutos.
+ *
+ * E o pior tipo de defeito que este projeto ja teve, porque NAO HA ERRO NA
+ * TELA: a lista dizia "Sem sinal ha 24min" ao lado de "posicao 11:20 - ha
+ * 9h00", e as duas frases estavam certas. O sinal vem de `listar_contatos`,
+ * uma linha por aparelho, que nunca estoura teto; a posicao vem dos pontos,
+ * que estouram. Um painel de parede passa o dia assim sem ninguem desconfiar.
+ *
+ * O corte e do PostgREST (`db-max-rows`), nao da funcao SQL: pedir
+ * `?limit=5000` ou mandar `Range: 0-4999` devolve 1000 do mesmo jeito --
+ * conferido nos tres jeitos. Nao da para negociar do lado do navegador.
+ *
+ * A SAIDA: uma escada de janelas encaixadas, do mais perto para o mais longe.
+ * A RPC so sabe responder "as ultimas N horas", sempre terminando agora, entao
+ * cada degrau devolve um pedaco que comeca mais atras que o anterior.
+ *
+ * BURACO NAO SERVE, e essa e a regra que manda no formato desta funcao. Um
+ * pedaco solto no passado, com falta no meio, seria pior que nao ter: o nucleo
+ * le falta de ponto como SILENCIO -- `trechosDeSilencio` marca no mapa,
+ * `calcularTrechos` parte o trecho em dois e `ocupacaoPorLugar` joga as horas
+ * em "sem confirmar". Um relatorio de ocupacao com silencio que nunca houve e
+ * numero errado no que o piloto existe para cobrar (CONTEXTO-VTU 2).
+ *
+ * Entao um degrau so entra se EMENDAR no que ja se tem: ou ele coube inteiro
+ * (menos de 1000 linhas), ou a ultima linha dele alcanca o pedaco anterior. No
+ * primeiro degrau que nao emenda, a escada para. O que se perde e alcance da
+ * timeline daquele aparelho, nunca a continuidade do que esta na tela.
+ *
+ * A janela curta vem primeiro de proposito: se tudo o mais falhar -- rede
+ * ruim, aparelho falante demais -- o painel ja tem a posicao de agora, que e a
+ * unica coisa que nao pode estar errada numa tela de patio.
+ */
+const TETO_DO_SERVIDOR = 1000;
+const ESCADA_HORAS = [1, 3, 6, 12, 24, 48, 96, 168];
+
+async function baixarHistorico(grupo, dispositivo, horas) {
+  const tudo = [];
+  let alcance = 0;                 // horas ja cobertas, sem buraco, ate agora
+
+  for (const degrau of ESCADA_HORAS) {
+    if (alcance >= horas) break;
+    const janela = Math.min(degrau, horas);
+    if (janela <= alcance) continue;
+
+    const lote = (await carregarPontos(grupo, dispositivo, janela)) || [];
+    const coube = lote.length < TETO_DO_SERVIDOR;
+    const fim = lote.length ? emMs(lote[lote.length - 1]) : 0;
+    const emenda = coube || fim >= Date.now() - alcance * 3600 * 1000;
+
+    // Nao emendou: aceitar deixaria falta no meio, e falta o nucleo le como
+    // silencio. Melhor uma timeline mais curta e inteira.
+    if (!emenda) break;
+
+    tudo.push.apply(tudo, lote);
+    alcance = janela;
+    if (janela >= horas) break;
+  }
+  return tudo;
+}
+
 /* ---------------- cercas (item 7) ----------------
    Quem entra com senha de família cria e apaga; quem entra com senha de
    grupo só enxerga. A cerca é da família e vale para todos os grupos dela,
@@ -2088,8 +2159,9 @@ async function atualizarHistorico() {
   const tarefas = aparelhos.map(async (a) => {
     const chave = chaveDe(a);
     const novato = !historico.has(chave);
-    const pontos = await carregarPontos(a.grupo, a.dispositivo,
-      novato ? HORAS_HISTORICO : HORAS_ATUALIZACAO);
+    const pontos = novato
+      ? await baixarHistorico(a.grupo, a.dispositivo, HORAS_HISTORICO)
+      : await carregarPontos(a.grupo, a.dispositivo, HORAS_ATUALIZACAO);
     mesclar(chave, pontos);
   });
   await Promise.all(tarefas);
