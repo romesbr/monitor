@@ -1491,6 +1491,10 @@ function abertoDoPrefixo(vinculos, prefixo) {
 
 
 
+/* `contatos` e `emMs` já eram usados aqui (em `tempoNoLugar`) SEM import: no
+   site funciona, porque o `embutir.js` junta os cinco arquivos num escopo só —
+   e no app quebraria na hora em que alguém chamasse. Importar de verdade custa
+   uma linha e tira a armadilha do caminho de quem vier depois. */
 
 
 /**
@@ -1666,6 +1670,131 @@ function tempoNoLugar(pontos, cercas, agora = Date.now()) {
   const fim = agora - ultimo >= silencioMs ? ultimo : agora;
   const ms = fim - inicio;
   return ms > 0 ? ms : 0;
+}
+
+/* ==================================================================
+   OCUPAÇÃO POR LUGAR — quanto tempo o ativo passou em cada cerca
+   ================================================================== */
+
+/**
+ * Quanto de erro uma cerca aguenta antes de a leitura não dizer mais nada.
+ *
+ * Uma cerca é aceita para uma leitura quando o RAIO dela — tirado da área,
+ * como se fosse um círculo — é pelo menos tão grande quanto o erro da leitura.
+ * Cerca de 300 m de raio com leitura que erra 100 m: dizer "estava nela" é
+ * honesto. Cerca de 50 m com a mesma leitura: não é, e o certo é não afirmar.
+ */
+const raioDaCerca = (c) => {
+  const a = area(c);
+  return Number.isFinite(a) ? Math.sqrt(a / Math.PI) : 0;
+};
+
+/**
+ * O lugar de uma leitura, ACEITANDO leitura grossa quando a cerca comporta.
+ *
+ * Devolve o nome da cerca, ou `null` quando não dá para afirmar nada — e essa
+ * diferença é o ponto todo: `null` não é "lugar desconhecido", é "não sei", e
+ * quem chama tem de tratar os dois de forma diferente.
+ */
+function lugarConfiavel(p, cercas) {
+  if (!p) return null;
+  const c = cercaDe(p, cercas);
+  if (!c || !c.nome) return null;
+  const erro = p.precisao ?? 0;
+  return raioDaCerca(c) >= erro ? c.nome : null;
+}
+
+/**
+ * Quanto tempo o ativo passou em cada cerca, no período.
+ *
+ * ------------------------------------------------------------------
+ * POR QUE ELE NÃO USA `calcularTrechos`
+ * ------------------------------------------------------------------
+ *
+ * O resumo "onde ficou" saía de `resumoPorLugar(trechos)`, e os trechos nascem
+ * de `leiturasBoas` — o corte de 50 m. Isso perdia HORAS INTEIRAS, e o dono
+ * viu antes de mim: passou a tarde na cerca da Oficina e o resumo não computou.
+ *
+ * Medido no CEL LEO, 24 h até 31/08 19:48. Todas as horas tinham entre 58 e 118
+ * pontos — nenhum buraco de gravação. Mas:
+ *
+ *     hora   pontos   com precisão ≤ 50 m
+ *     22h      101       1
+ *     06h      106       0
+ *     15h       66      11
+ *     16h       58       2
+ *
+ * Hora sem leitura boa não era atribuída a lugar nenhum e sumia da conta, em
+ * silêncio. E some no pior lugar possível: o GPS não pega dentro de galpão,
+ * então as horas cegas são justamente as da oficina — o tempo parado que o
+ * piloto existe para cobrar (CONTEXTO-VTU 2).
+ *
+ * A assimetria que resolve: uma leitura que erra 100 m é ruim para escolher
+ * entre dois desvios do mesmo pátio, e é ÓTIMA para dizer que o ativo está
+ * dentro de uma cerca de 300 m. É a mesma assimetria que `escolherPin` usou em
+ * 29/08 para o pin parar de mentir.
+ *
+ * ------------------------------------------------------------------
+ * O QUE ELE NUNCA FAZ: inventar
+ * ------------------------------------------------------------------
+ *
+ * Tempo que ninguém observou não vira permanência. Três casos vão para
+ * `naoObservado` em vez de para uma cerca:
+ *
+ *   - buraco de silêncio entre duas leituras (o aparelho pode ter dado a volta
+ *     no pátio e voltado — foi o "aqui há 65h35" de 12/08/2026);
+ *   - leitura cuja precisão é grande demais para a cerca em que ela caiu;
+ *   - leitura fora de qualquer cerca.
+ *
+ * Quem mostra o resultado TEM de mostrar `naoObservado` junto. Um resumo que
+ * soma 24 h sem dizer que 6 delas são chute é pior que um resumo que soma 18 —
+ * o primeiro é destruído no primeiro questionamento, junto com o resto do
+ * relatório.
+ *
+ * Devolve { lugares: [{ lugar, total }], naoObservado, observado }.
+ */
+function ocupacaoPorLugar(pontos, cercas, opcoes = {}) {
+  const silencioMs = opcoes.silencioMs ?? SILENCIO_LUGAR_MS;
+  const ate = opcoes.ate ?? Date.now();
+
+  /* TODAS as leituras, não só as boas — é essa a diferença. A ordem importa
+     porque o tempo é medido entre uma leitura e a seguinte. */
+  const ps = contatos(pontos).filter((p) => emMs(p) <= ate);
+  const lugares = new Map();
+  let naoObservado = 0;
+  let observado = 0;
+
+  for (let i = 0; i < ps.length - 1; i++) {
+    const dt = emMs(ps[i + 1]) - emMs(ps[i]);
+    if (dt <= 0) continue;
+
+    /* Buraco: ninguém viu nada aqui. Não conta para lugar nenhum. */
+    if (dt >= silencioMs) {
+      naoObservado += dt;
+      continue;
+    }
+
+    /* O intervalo só vira permanência quando as DUAS pontas concordam sobre o
+       lugar. Concordar é o que separa "ficou lá" de "passou por lá": com uma
+       ponta só, um ativo que saiu no meio do intervalo apareceria como se
+       tivesse ficado. */
+    const a = lugarConfiavel(ps[i], cercas);
+    const b = lugarConfiavel(ps[i + 1], cercas);
+    if (a != null && a === b) {
+      lugares.set(a, (lugares.get(a) ?? 0) + dt);
+      observado += dt;
+    } else {
+      naoObservado += dt;
+    }
+  }
+
+  return {
+    lugares: [...lugares.entries()]
+      .map(([lugar, total]) => ({ lugar, total }))
+      .sort((x, y) => y.total - x.total),
+    naoObservado,
+    observado,
+  };
 }
 
 /* NUCLEO:FIM */
@@ -2674,7 +2803,26 @@ function desenharDetalhe(c) {
   const e = estadoDe(selecionado);
   const pontos = janelaDe(selecionado, HORAS_ROTA);
   const trechos = calcularTrechos(pontos);
-  const lugares = resumoPorLugar(trechos, lugarDe);
+  /* O resumo "onde ficou" passou a sair de `ocupacaoPorLugar`, e não mais de
+     `resumoPorLugar(trechos)`.
+
+     A troca é de 01/09/2026 e o motivo está medido: os trechos nascem de
+     `leiturasBoas` — o corte de 50 m — e isso perdia HORAS INTEIRAS. No CEL LEO,
+     nas 24 h até 31/08 19:48, todas as horas tinham entre 58 e 118 pontos, sem
+     buraco de gravação; mas 22h teve 1 leitura boa de 101, e 06h teve ZERO de
+     106. Hora sem leitura boa não era atribuída a lugar nenhum e sumia da
+     conta, calada.
+
+     E sumia no pior lugar possível: o GPS não pega dentro de galpão, então as
+     horas cegas eram justamente as da oficina — o tempo parado que o piloto
+     existe para cobrar. O dono viu antes de mim: "fiquei na oficina a tarde
+     inteira e ele não está computando isso".
+
+     `ocupacaoPorLugar` aceita leitura grossa quando a CERCA é grande perto do
+     erro dela, e devolve `naoObservado` separado — o que não dá para afirmar
+     continua sem ser afirmado. */
+  const ocupacao = ocupacaoPorLugar(pontos, cercas, { ate: relogioAtual() });
+  const lugares = ocupacao.lugares;
   const s = e.sinal;
 
   // A cobertura do MESMO período dos totais logo abaixo (CONTEXTO-VTU 5.2).
@@ -2811,6 +2959,29 @@ function desenharDetalhe(c) {
       d.querySelector(".dur").textContent = duracao(l.total);
       alvoLugares.appendChild(d);
     });
+  }
+
+  /* O QUE NÃO DÁ PARA AFIRMAR fica escrito, sempre que existir.
+
+     É a metade que sustenta a outra. `ocupacaoPorLugar` manda para
+     `naoObservado` o silêncio, a leitura fora de cerca e a leitura grossa
+     demais para a cerca em que caiu — e esconder isso transformaria um resumo
+     honesto num resumo inflado.
+
+     O CONTEXTO-VTU 2 é explícito: tempo que ninguém observou não pode virar
+     número a favor de quem cobra. Um resumo que soma 24 h sem dizer que 6 são
+     chute é destruído no primeiro questionamento, e leva o resto do relatório
+     junto. Escrever "6h00 sem confirmar" é o que faz o resto valer. */
+  if (ocupacao.naoObservado > 0) {
+    const d = document.createElement("div");
+    d.className = "lugar";
+    d.style.color = "var(--suave)";
+    d.innerHTML = '<span class="nom"></span><span class="dur"></span>';
+    d.querySelector(".nom").textContent = "Sem confirmar";
+    d.querySelector(".dur").textContent = duracao(ocupacao.naoObservado);
+    d.title = "Tempo em que não dá para afirmar onde o ativo estava: " +
+      "sem sinal, fora de qualquer cerca, ou com posição imprecisa demais para a cerca.";
+    alvoLugares.appendChild(d);
   }
 
   /* A lista de trechos mostra o PERÍODO INTEIRO, não o pedaço até o instante
