@@ -847,6 +847,49 @@ function deslocamentoMs(ms) {
 
 
 const MOVIMENTO_SUSTENTADO_MS = 60 * 1000; // item 4: 60 s fora do raio
+
+/**
+ * QUANTAS VEZES O RAIO A LEITURA PRECISA SE AFASTAR PARA SER VIAGEM.
+ *
+ * O dono viu o resumo somar ~39 minutos de "Em Deslocamento" na noite de
+ * 01/09/2026, com o celular na mesa da casa dele. Medido naquele periodo:
+ *
+ *     22:03  prec  0,7  vel 0,35   saltou   0 m
+ *     22:14  prec 20,2  vel 9,38   saltou  31 m
+ *     22:16  prec  9,3  vel 2,55   saltou  31 m
+ *     22:24  prec  9,9  vel 5,67   saltou  32 m
+ *
+ *     em 25 minutos, os dois pontos mais afastados: 50 m
+ *
+ * Saltos de 31 m contra um raio de 20 m: a regra via saida duas vezes e abria
+ * viagem. So que o aparelho nunca deixou um circulo de 50 metros.
+ *
+ * A trava anterior -- raio que cresce com o erro DECLARADO -- nao segura este
+ * caso, e o motivo esta na propria tabela: as leituras que saltam 31 m se
+ * declaram com 0,7 e 9,3 m de erro. O aparelho mente sobre a propria precisao,
+ * coisa comum em GPS parado, que reporta o erro do CALCULO e nao o do
+ * RESULTADO.
+ *
+ * POR QUE NAO E A VELOCIDADE, que foi a minha primeira ideia e que eu cheguei
+ * a propor ao dono antes de medir. Ela separa lindamente na media e nao separa
+ * caso a caso:
+ *
+ *     andando de carro   142 pontos   mediana 12,20 m/s   MINIMO 0,52
+ *     parado em casa      46 pontos   mediana  0,79 m/s   MAXIMO 9,38
+ *
+ * As pontas se cruzam. Corte por leitura erra dos dois lados.
+ *
+ * O que separa e DISTANCIA: parado, 50 m em 25 minutos; andando, 100 a 150 m
+ * entre leituras SEGUIDAS. Tres vezes o raio efetivo -- 60 m contra os 20 m de
+ * parada -- passa folgado acima da tremida medida e muito abaixo de qualquer
+ * deslocamento de verdade.
+ *
+ * O PRECO, dito claro: manobra de menos de 60 m nao vira "deslocamento". Num
+ * relatorio de ocupacao de patio isso e aceitavel -- a locomotiva continua no
+ * mesmo lugar para quem cobra. Se um dia essa resolucao fizer falta, o numero
+ * a mexer e este, e a evidencia para revisitar esta escrita acima.
+ */
+const FATOR_SAIDA = 3;
 const FAROL_AMARELO_MIN = 15;
 const FAROL_VERMELHO_MIN = 25;
 const SINAL_FRACO_MIN = 12;
@@ -966,11 +1009,31 @@ function calcularTrechos(pontos, opcoes = {}) {
          "Em Deslocamento há 24min" com o CEL CORP LEO parado na mesa —
          conferido rodando este núcleo em cima dos pontos reais dele antes de
          prometer qualquer coisa ao dono. */
-      if (distancia(parada.ancora, p) <= raioEfetivo(parada.ancora, p, raio)) {
+      const raioAqui = raioEfetivo(parada.ancora, p, raio);
+      const daAncora = distancia(parada.ancora, p);
+
+      if (daAncora <= raioAqui) {
         parada.fim = t;      // continua parado
         suspeita = null;     // se havia saída em curso, foi excursão: esquece
         continue;
       }
+
+      /* A FAIXA DA TREMIDA: saiu do raio, mas não o bastante para ser viagem.
+
+         Aqui mora o celular na mesa que salta 31 m com raio de 20. Ele não
+         está dentro do raio, e também não foi a lugar nenhum — continua sendo
+         a mesma parada, e o tempo dele conta como parada, que é a verdade
+         observada. Ver a nota do `FATOR_SAIDA`, com os números medidos.
+
+         Zerar a suspeita aqui é de propósito: leitura nesta faixa é prova de
+         que ele continua por perto, e não pode servir de degrau para a
+         seguinte abrir viagem. */
+      if (daAncora <= raioAqui * FATOR_SAIDA) {
+        parada.fim = t;
+        suspeita = null;
+        continue;
+      }
+
       /* `leituras` conta quantas leituras BOAS já viram o aparelho fora do
          raio. É o que separa uma saída observada de uma saída deduzida — ver
          a nota no fim desta função, onde esse número decide. */
