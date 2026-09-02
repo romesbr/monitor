@@ -1085,8 +1085,33 @@ function trechosDeSilencio(pontos, opcoes = {}) {
   return buracos;
 }
 
+/**
+ * IGNORANCIA NAO E VERDE.
+ *
+ * `paradoMin` nulo quer dizer "nao sei ha quanto tempo ele esta ai" -- e sem a
+ * guarda abaixo isso virava VERDE, a luz mais tranquila do painel. Nao por
+ * decisao nenhuma: `null < 15` em JavaScript vira `0 < 15`, verdadeiro. O
+ * painel dizia "parado ha zero minuto" quando queria dizer "nao faco ideia".
+ *
+ * Medido em 01/09/2026, com o dono olhando a tela e perguntando por que o
+ * aparelho quebrado parecia o mais saudavel:
+ *
+ *     CEL CORP LEO   farol verde   paradoMs null   ultima leitura boa: 8 h atras
+ *     CEL LEO        farol vermelho              lendo a 1 m, de 10 em 10 min
+ *
+ * O aparelho que sabia onde estava aparecia em vermelho, certo -- parado ha
+ * 1h35. O que nao produzia posicao confiavel havia oito horas aparecia em
+ * verde. Num painel de parede que existe para alguem bater o olho e agir, essa
+ * e a pior inversao possivel.
+ *
+ * "cinza" e um estado a parte de proposito, e nao um quarto tom da escala de
+ * tempo: ele nao fala de quanto tempo a loco esta parada, fala de que o painel
+ * nao tem base para afirmar nada. Quem pinta trata cor desconhecida com `||`,
+ * entao aparelho antigo nao quebra -- cai no cinza de "parado" que ja existe.
+ */
 function farolDe(paradoMin, emMovimento) {
   if (emMovimento) return "azul";
+  if (paradoMin == null || !Number.isFinite(paradoMin)) return "cinza";
   if (paradoMin < FAROL_AMARELO_MIN) return "verde";
   if (paradoMin <= FAROL_VERMELHO_MIN) return "amarelo";
   return "vermelho";
@@ -1192,11 +1217,17 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
       emMovimento: false,
       desde: null,
       paradoMs: null,
-      farol: "verde",
+      // Nenhuma leitura boa em toda a janela: nao ha nem desde quando dizer.
+      semPosicaoConfiavel: true,
+      semPosicaoMs: null,
+      farol: "cinza",
       sinal,
       trechos: [],
     });
   }
+
+  const silencioMs = opcoes.silencioMs ?? SINAL_MUDO_MIN * 60000;
+  const semPosicaoMs = agora - emMs(ps[ps.length - 1]);
 
   const trechos = calcularTrechos(ps, { ...opcoes, agora });
   const ultimo = trechos[trechos.length - 1];
@@ -1214,7 +1245,9 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
       emMovimento: false,
       desde: null,
       paradoMs: null,
-      farol: "verde",
+      semPosicaoConfiavel: semPosicaoMs >= silencioMs,
+      semPosicaoMs,
+      farol: semPosicaoMs >= silencioMs ? "cinza" : "verde",
       sinal,
       trechos: [],
     });
@@ -1259,8 +1292,7 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
      Além de consertar isso, é o que a pergunta sempre quis dizer: houve
      POSIÇÃO recente? Quem responde isso é a leitura, não a arrumação dela em
      trechos. */
-  const semPosicaoDesde = agora - emMs(ps[ps.length - 1]);
-  const tracadoCongelado = semPosicaoDesde >= (opcoes.silencioMs ?? SINAL_MUDO_MIN * 60000);
+  const tracadoCongelado = semPosicaoMs >= silencioMs;
 
   const emMovimento = ultimo.tipo === "movimento" && !sinal.mudo && !tracadoCongelado;
   const desde = tracadoCongelado
@@ -1283,7 +1315,9 @@ function estadoAtual(pontos, agora = Date.now(), opcoes = {}) {
     emMovimento,
     desde,
     paradoMs,
-    farol: farolDe(paradoMs / 60000, emMovimento),
+    semPosicaoConfiavel: tracadoCongelado,
+    semPosicaoMs,
+    farol: farolDe(paradoMs == null ? null : paradoMs / 60000, emMovimento),
     sinal,
     trechos,
   });
@@ -1398,6 +1432,25 @@ function textoStatus(estado) {
      trecho, logo não existe duração. "Parado há —" é frase quebrada, e pior:
      parece defeito quando na verdade é o painel sendo honesto sobre não saber
      há quanto tempo. Sabe-se que ele está lá; não se sabe desde quando. */
+  /* SEM POSICAO CONFIAVEL nao e "Parado".
+  
+     Os dois casos caiam na mesma frase, e sao muito diferentes. Um e o painel
+     sabendo ONDE e nao sabendo DESDE QUANDO -- legitimo, e a frase acima
+     explica. O outro e o painel nao ter posicao confiavel ha horas, com o pin
+     apoiado numa leitura de antena.
+  
+     Medido em 01/09/2026 no CEL CORP LEO: ultima leitura boa as 13:19, em
+     Itaciba; oito horas depois o painel dizia "Parado - Home Romero Perim",
+     com luz verde, porque o pin tinha migrado para uma leitura de 100 m. Cada
+     peca estava certa sozinha -- `escolherPin` preferir a leitura grossa e
+     nova a uma boa e velha de 7 km e o conserto de 29/08 funcionando. O que
+     faltava era a frase dizer em que apoio ela esta de pe. */
+  if (estado.semPosicaoConfiavel) {
+    const ms = estado.semPosicaoMs;
+    return ms != null && ms > 0
+      ? "Sem posição confiável há " + duracao(ms)
+      : "Sem posição confiável";
+  }
   if (estado.paradoMs == null) return "Parado";
   return "Parado há " + duracao(estado.paradoMs);
 }
@@ -1866,9 +1919,14 @@ const HORAS_ROTA = 24;                      // a rota que aparece ao clicar
 const HORAS_ATUALIZACAO = 1;                // só o pedaço novo, a cada 15 s
 // PASSO_MARCA (os 500 m entre os pontinhos) vem do núcleo, junto com a conta.
 
+/* "cinza" nao e um quarto tom da escala de tempo: e o painel dizendo que nao
+   tem base para afirmar nada. Precisa estar aqui EXPLICITO porque o desenho do
+   pin caia em `|| COR_FAROL.verde` -- ou seja, farol desconhecido virava verde,
+   que e o oposto do que um estado de ignorancia deve parecer. */
 const COR_FAROL = {
   verde: getComputedStyle(document.documentElement).getPropertyValue("--vivo").trim() || "#2E7D74",
   amarelo: "#C08A2E", vermelho: "#B5563F", azul: "#2F6DB5",
+  cinza: getComputedStyle(document.documentElement).getPropertyValue("--parado").trim() || "#8A8F98",
 };
 
 let acesso = null;        // { tipo:'grupo'|'familia', nome, senha }
@@ -2312,7 +2370,8 @@ const pinIncerto = (estado) =>
   estado.posicao.precisao > PRECISAO_MAX;
 
 function iconePin(estado, aberto) {
-  const cor = COR_FAROL[estado.farol] || COR_FAROL.verde;
+  // Desconhecido cai no CINZA, nunca no verde: ver a nota em COR_FAROL.
+  const cor = COR_FAROL[estado.farol] || COR_FAROL.cinza;
   const incerto = pinIncerto(estado);
   const gota =
     '<svg width="30" height="40" viewBox="0 0 30 40">' +
