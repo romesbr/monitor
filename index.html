@@ -2031,16 +2031,46 @@ async function carregarContatos() {
   }
 }
 
-function carregarPontos(grupo, dispositivo, horas) {
+/**
+ * OS BRUTOS EXISTEM E O PAINEL NÃO PEDIA.
+ *
+ * Medido no banco em 02/09/2026, últimas 2 h:
+ *
+ *     CEL LEO   bruto 234   percurso 8   vida 6
+ *     CEL CORP  bruto  36                vida 12
+ *
+ * O painel recebia 14 pontos em duas horas — os tais "6 por hora" que o dono
+ * reclamou — enquanto 234 estavam guardados e ninguém pedia. As duas funções do
+ * banco já tinham a porta pronta desde sempre:
+ *
+ *     listar_pontos_familia(..., p_brutos boolean DEFAULT false)
+ *       and (coalesce(p_brutos, false) or p.tipo is distinct from 'bruto')
+ *
+ * Um booleano. Não precisa de SQL novo, nem de APK novo.
+ *
+ * Por que só na janela RECENTE: bruto sai a cada 25 s, que dá ~120 por hora por
+ * aparelho. Pedir a semana inteira seriam 20 mil linhas por aparelho — muito
+ * além do teto do servidor e sem serventia nenhuma, porque a timeline de 7 dias
+ * não desenha detalhe de 25 segundos. Perto, o detalhe é tudo; longe, é peso.
+ *
+ * Por que isto NÃO estraga o traçado: o núcleo já separa os dois usos. Quem
+ * desenha a linha chama `leiturasBoas`, que passa por `semBrutos` e continua
+ * ignorando bruto — a regra que evita os rabiscos fica de pé, intacta. Quem
+ * ganha é `contatos()`, que prova que o aparelho está vivo, e o pin, que passa
+ * a saber de posições de 25 em 25 segundos em vez de 10 em 10 minutos.
+ */
+function carregarPontos(grupo, dispositivo, horas, comBrutos) {
   if (acesso.tipo === "familia") {
     return rpc("listar_pontos_familia", {
       p_nome: acesso.nome, p_senha: acesso.senha,
-      p_grupo: grupo, p_dispositivo: dispositivo, p_horas: horas
+      p_grupo: grupo, p_dispositivo: dispositivo, p_horas: horas,
+      p_brutos: Boolean(comBrutos)
     });
   }
   return rpc("listar_pontos", {
     p_nome: acesso.nome, p_senha: acesso.senha,
-    p_dispositivo: dispositivo, p_horas: horas
+    p_dispositivo: dispositivo, p_horas: horas,
+    p_brutos: Boolean(comBrutos)
   });
 }
 
@@ -2099,7 +2129,9 @@ async function baixarHistorico(grupo, dispositivo, horas) {
     const janela = Math.min(degrau, horas);
     if (janela <= alcance) continue;
 
-    const lote = (await carregarPontos(grupo, dispositivo, janela)) || [];
+    // Brutos só no degrau mais perto: é lá que o detalhe de 25 s vale.
+    const lote = (await carregarPontos(grupo, dispositivo, janela,
+                                       janela <= HORAS_ATUALIZACAO)) || [];
     const coube = lote.length < TETO_DO_SERVIDOR;
     const fim = lote.length ? emMs(lote[lote.length - 1]) : 0;
     const emenda = coube || fim >= Date.now() - alcance * 3600 * 1000;
@@ -2219,7 +2251,7 @@ async function atualizarHistorico() {
     const novato = !historico.has(chave);
     const pontos = novato
       ? await baixarHistorico(a.grupo, a.dispositivo, HORAS_HISTORICO)
-      : await carregarPontos(a.grupo, a.dispositivo, HORAS_ATUALIZACAO);
+      : await carregarPontos(a.grupo, a.dispositivo, HORAS_ATUALIZACAO, true);
     mesclar(chave, pontos);
   });
   await Promise.all(tarefas);
