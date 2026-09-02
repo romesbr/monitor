@@ -2958,13 +2958,36 @@ function desenharPainelLateral() {
        E vai com a idade junto ("· há 5min"). Numa tela de parede, "15:59"
        sozinho obriga quem passa a fazer a conta de cabeça; e um painel que
        parou de atualizar tem exatamente a mesma cara de um pátio parado. */
+    /* O ÚLTIMO DADO volta para a lista, ao lado da posição.
+    
+       Quando esta linha foi consertada, mais cedo em 01/09/2026, ela dizia
+       "última posição" e mostrava `ultimoContatoMs` — rótulo de uma coisa,
+       número de outra. Trocar pelo número certo consertou a mentira e levou
+       junto o número que o dono usa: o dono percebeu na mesma noite, "no resumo
+       o texto de 'último dado recebido' sumiu".
+    
+       Ele tem razão, e a razão é do CONTEXTO-VTU 2: quem olha o painel decide
+       ir conferir uma locomotiva pelo tempo desde a última NOTÍCIA, não pelo
+       tempo desde a última posição. São perguntas diferentes e agora as duas
+       aparecem, cada uma com o nome certo — que é o oposto de antes, quando
+       havia um número só com o nome errado.
+    
+       O "dado" sai sempre, mesmo igual à posição. Campo que aparece e some
+       obriga quem passa a reparar que ele sumiu; numa tela de parede isso não
+       acontece. */
     const posMs = e.posicaoMs ?? e.ultimoContatoMs;
     const idade = posMs != null ? relogioAtual() - posMs : null;
+    const dadoMs = e.ultimoContatoMs;
+    const idadeDado = dadoMs != null ? relogioAtual() - dadoMs : null;
     d.querySelector(".lc").textContent = lugarDe(e.posicao) +
       (posMs != null
         ? " · posição " + relogioMs(posMs) +
           (idade != null && idade > 0 ? " · há " + duracao(idade) : "")
-        : " · sem posição");
+        : " · sem posição") +
+      (dadoMs != null
+        ? " · dado " + relogioMs(dadoMs) +
+          (idadeDado != null && idadeDado > 0 ? " · há " + duracao(idadeDado) : "")
+        : "");
     d.onclick = () => { selecionado = chave; enquadrado = false; pintarTudo(); };
     return d;
   };
